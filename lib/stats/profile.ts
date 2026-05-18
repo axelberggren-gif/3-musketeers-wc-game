@@ -1,0 +1,62 @@
+import { supabaseServer } from "@/lib/supabase/server";
+
+export interface ProfileStats {
+  totalPoints: number;
+  matchPoints: number;
+  bracketPoints: number;
+  tournamentPoints: number;
+  propPoints: number;
+  picksMade: number;
+  picksScored: number;
+  accuracy: number;
+  pointsByDay: { date: string; points: number }[];
+}
+
+export async function loadProfileStats(userId: string): Promise<ProfileStats> {
+  const supabase = await supabaseServer();
+  const [{ data: awards }, { data: picks }] = await Promise.all([
+    supabase
+      .from("point_awards")
+      .select("prediction_type, points, awarded_at")
+      .eq("user_id", userId)
+      .order("awarded_at"),
+    supabase.from("match_predictions").select("id").eq("user_id", userId),
+  ]);
+
+  const safeAwards = awards ?? [];
+  const matchAwards = safeAwards.filter((a) => a.prediction_type === "match");
+  const totalPoints = safeAwards.reduce((sum, a) => sum + (a.points ?? 0), 0);
+  const matchPoints = matchAwards.reduce((sum, a) => sum + (a.points ?? 0), 0);
+  const bracketPoints = safeAwards
+    .filter((a) => a.prediction_type === "bracket")
+    .reduce((sum, a) => sum + (a.points ?? 0), 0);
+  const tournamentPoints = safeAwards
+    .filter((a) => a.prediction_type === "tournament")
+    .reduce((sum, a) => sum + (a.points ?? 0), 0);
+  const propPoints = safeAwards
+    .filter((a) => a.prediction_type === "prop")
+    .reduce((sum, a) => sum + (a.points ?? 0), 0);
+
+  const picksMade = (picks ?? []).length;
+  const picksScored = matchAwards.length;
+  const accuracy = picksMade ? Math.round((picksScored / picksMade) * 100) : 0;
+
+  const byDay = new Map<string, number>();
+  for (const a of safeAwards) {
+    const date = new Date(a.awarded_at).toISOString().slice(0, 10);
+    byDay.set(date, (byDay.get(date) ?? 0) + (a.points ?? 0));
+  }
+  const pointsByDay = Array.from(byDay.entries()).map(([date, points]) => ({ date, points }));
+
+  return {
+    totalPoints,
+    matchPoints,
+    bracketPoints,
+    tournamentPoints,
+    propPoints,
+    picksMade,
+    picksScored,
+    accuracy,
+    pointsByDay,
+  };
+}
