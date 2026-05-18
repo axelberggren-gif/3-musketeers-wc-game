@@ -9,16 +9,20 @@ export default async function LoginPage() {
   } = await supabase.auth.getUser();
   if (user) redirect("/leagues");
 
+  const devInstant = process.env.DEV_INSTANT_LOGIN === "true";
+
   return (
     <main className="flex-1 flex items-center justify-center px-6 py-20">
       <div className="card w-full max-w-md flex flex-col gap-6">
         <div>
           <h1 className="text-2xl font-bold">Sign in</h1>
           <p className="text-sm text-[var(--muted)] mt-1">
-            We&rsquo;ll email you a magic link. No password.
+            {devInstant
+              ? "Dev mode: enter an existing user's email to log in instantly."
+              : "We'll email you a magic link. No password."}
           </p>
         </div>
-        <LoginForm />
+        <LoginForm devInstant={devInstant} />
       </div>
     </main>
   );

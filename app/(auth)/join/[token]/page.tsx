@@ -50,7 +50,10 @@ export default async function JoinPage({
             You&rsquo;ve been invited to a private league. Sign in to join.
           </p>
         </div>
-        <LoginForm inviteToken={token} />
+        <LoginForm
+          inviteToken={token}
+          devInstant={process.env.DEV_INSTANT_LOGIN === "true"}
+        />
       </div>
     </main>
   );
