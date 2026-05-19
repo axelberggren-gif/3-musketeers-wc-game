@@ -1,7 +1,10 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { supabaseServer } from "@/lib/supabase/server";
+import { unwrapRelation } from "@/lib/utils";
 import { OverrideForm } from "./OverrideForm";
+
+type TeamName = { name: string };
 
 export default async function AdminMatchEditPage({
   params,
@@ -18,8 +21,8 @@ export default async function AdminMatchEditPage({
     .eq("id", id)
     .maybeSingle();
   if (!match) notFound();
-  const home = Array.isArray(match.home) ? match.home[0] : match.home;
-  const away = Array.isArray(match.away) ? match.away[0] : match.away;
+  const home = unwrapRelation(match.home as TeamName | TeamName[] | null);
+  const away = unwrapRelation(match.away as TeamName | TeamName[] | null);
 
   return (
     <div className="flex flex-col gap-4 max-w-md">

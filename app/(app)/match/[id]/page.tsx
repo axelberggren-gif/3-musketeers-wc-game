@@ -3,8 +3,11 @@ import { notFound } from "next/navigation";
 import { supabaseServer } from "@/lib/supabase/server";
 import { CountryFlag } from "@/components/CountryFlag";
 import { matchIsLocked } from "@/lib/scoring/lock";
-import { isoToLocal } from "@/lib/utils";
+import { isoToLocal, unwrapRelation } from "@/lib/utils";
 import type { Pick1X2 } from "@/lib/supabase/types";
+
+type MatchTeamRel = { id: string; name: string; code: string; crest_url: string | null };
+type ProfileRel = { username: string; display_name: string | null };
 
 export default async function MatchPage({
   params,
@@ -27,12 +30,8 @@ export default async function MatchPage({
     .maybeSingle();
   if (!match) notFound();
 
-  const home = (Array.isArray(match.home) ? match.home[0] : match.home) as
-    | { id: string; name: string; code: string; crest_url: string | null }
-    | null;
-  const away = (Array.isArray(match.away) ? match.away[0] : match.away) as
-    | { id: string; name: string; code: string; crest_url: string | null }
-    | null;
+  const home = unwrapRelation(match.home as MatchTeamRel | MatchTeamRel[] | null);
+  const away = unwrapRelation(match.away as MatchTeamRel | MatchTeamRel[] | null);
 
   const locked = matchIsLocked(match.kickoff_at);
 
@@ -105,7 +104,7 @@ export default async function MatchPage({
           </div>
           <ul className="flex flex-col divide-y divide-[var(--border)] text-sm">
             {friendsPicks.map((row, i) => {
-              const profile = Array.isArray(row.profile) ? row.profile[0] : row.profile;
+              const profile = unwrapRelation(row.profile as ProfileRel | ProfileRel[] | null);
               return (
                 <li key={`${profile?.username}-${i}`} className="flex items-center justify-between py-2">
                   <Link

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { supabaseServer } from "@/lib/supabase/server";
 import { CountryFlag } from "@/components/CountryFlag";
-import { isoToLocal } from "@/lib/utils";
+import { isoToLocal, unwrapRelation } from "@/lib/utils";
 import { Trophy, ListOrdered, Users } from "lucide-react";
 
 export default async function LeagueHomePage({
@@ -147,8 +147,8 @@ type MatchRowData = {
 };
 
 function MatchRow({ match, showScore }: { match: MatchRowData; showScore?: boolean }) {
-  const home = (Array.isArray(match.home) ? match.home[0] : match.home) as MatchTeam;
-  const away = (Array.isArray(match.away) ? match.away[0] : match.away) as MatchTeam;
+  const home = unwrapRelation(match.home);
+  const away = unwrapRelation(match.away);
   return (
     <li className="py-2.5 flex items-center gap-3">
       <Link href={`/match/${match.id}`} className="flex items-center gap-3 flex-1 min-w-0">

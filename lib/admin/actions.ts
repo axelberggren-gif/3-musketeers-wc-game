@@ -72,6 +72,14 @@ export async function overrideMatchResult(formData: FormData) {
   const matchId = String(formData.get("match_id"));
   const homeScore = Number(formData.get("home_score"));
   const awayScore = Number(formData.get("away_score"));
+  if (
+    !Number.isInteger(homeScore) ||
+    !Number.isInteger(awayScore) ||
+    homeScore < 0 ||
+    awayScore < 0
+  ) {
+    return { ok: false, error: "Scores must be non-negative integers." } as const;
+  }
   const winner =
     homeScore > awayScore ? "HOME" : homeScore < awayScore ? "AWAY" : "DRAW";
 
@@ -91,6 +99,9 @@ export async function overrideMatchResult(formData: FormData) {
   await service.rpc("score_match", { p_match_id: matchId });
   try {
     await service.rpc("score_bracket");
+  } catch {}
+  try {
+    await service.rpc("score_tournament");
   } catch {}
   try {
     await service.rpc("refresh_league_standings");

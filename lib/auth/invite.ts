@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { supabaseService } from "@/lib/supabase/server";
+import { unwrapRelation } from "@/lib/utils";
 
 const COOKIE_NAME = "invite_token";
 
@@ -42,7 +43,9 @@ export async function validateInviteToken(token: string): Promise<ValidatedInvit
   if (!data || data.revoked) return null;
   if (data.expires_at && new Date(data.expires_at) < new Date()) return null;
   if (data.max_uses && data.uses_count >= data.max_uses) return null;
-  const league = Array.isArray(data.leagues) ? data.leagues[0] : data.leagues;
+  const league = unwrapRelation(
+    data.leagues as { name: string; slug: string } | { name: string; slug: string }[] | null,
+  );
   if (!league) return null;
   return {
     invite_id: data.id,
@@ -52,32 +55,22 @@ export async function validateInviteToken(token: string): Promise<ValidatedInvit
   };
 }
 
+interface RedeemRow {
+  ok: boolean;
+  league_slug: string | null;
+  error: string | null;
+}
+
 export async function consumeInviteForUser(token: string, userId: string) {
   const service = supabaseService();
-  const validated = await validateInviteToken(token);
-  if (!validated) return { ok: false, error: "Invite is invalid or expired." } as const;
-
-  // Insert membership (no-op if already a member)
-  const { error: memberErr } = await service
-    .from("league_members")
-    .upsert(
-      { league_id: validated.league_id, user_id: userId, role: "member" },
-      { onConflict: "league_id,user_id" },
-    );
-  if (memberErr) return { ok: false, error: memberErr.message } as const;
-
-  // Increment use count
-  const { data: cur } = await service
-    .from("league_invites")
-    .select("uses_count")
-    .eq("id", validated.invite_id)
-    .single();
-  if (cur) {
-    await service
-      .from("league_invites")
-      .update({ uses_count: (cur.uses_count ?? 0) + 1 })
-      .eq("id", validated.invite_id);
+  const { data, error } = await service.rpc("redeem_league_invite", {
+    p_token: token,
+    p_user_id: userId,
+  });
+  if (error) return { ok: false, error: error.message } as const;
+  const row = (Array.isArray(data) ? data[0] : (data as RedeemRow | null)) as RedeemRow | undefined;
+  if (!row?.ok || !row.league_slug) {
+    return { ok: false, error: row?.error ?? "Invite is invalid or expired." } as const;
   }
-
-  return { ok: true, league_slug: validated.league_slug } as const;
+  return { ok: true, league_slug: row.league_slug } as const;
 }

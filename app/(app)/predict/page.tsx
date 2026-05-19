@@ -1,5 +1,6 @@
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { computeLockState } from "@/lib/scoring/lock";
+import { unwrapRelation } from "@/lib/utils";
 import { MatchPickCard, type MatchPickRow } from "@/components/predict/MatchPickCard";
 import { TournamentForm } from "@/components/predict/TournamentForm";
 import { CountdownBanner } from "@/components/predict/CountdownBanner";
@@ -67,7 +68,7 @@ export default async function Round1Page() {
   const players = (playersRes.data ?? []).map((p) => ({
     id: p.id,
     name: p.name,
-    team_name: (Array.isArray(p.team) ? p.team[0] : p.team)?.name ?? null,
+    team_name: unwrapRelation(p.team as { name: string } | { name: string }[] | null)?.name ?? null,
   }));
   const lastSync = lastSyncRes.data as
     | { ran_at: string; endpoint: string; status_code: number | null; message: string | null }
