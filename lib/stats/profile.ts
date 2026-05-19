@@ -6,24 +6,33 @@ export interface ProfileStats {
   bracketPoints: number;
   tournamentPoints: number;
   propPoints: number;
-  picksMade: number;
+  // picksMade / accuracy are only computed when the viewer IS the profile owner
+  // — RLS scopes `match_predictions` differently from `point_awards`, so mixing
+  // the two for other viewers produces a misleading percentage.
+  picksMade: number | null;
   picksScored: number;
-  accuracy: number;
+  accuracy: number | null;
   pointsByDay: { date: string; points: number }[];
 }
 
-export async function loadProfileStats(userId: string): Promise<ProfileStats> {
+export async function loadProfileStats(
+  userId: string,
+  viewerId?: string,
+): Promise<ProfileStats> {
+  const isSelf = !!viewerId && viewerId === userId;
   const supabase = await supabaseServer();
-  const [{ data: awards }, { data: picks }] = await Promise.all([
-    supabase
-      .from("point_awards")
-      .select("prediction_type, points, awarded_at")
-      .eq("user_id", userId)
-      .order("awarded_at"),
-    supabase.from("match_predictions").select("id").eq("user_id", userId),
-  ]);
 
-  const safeAwards = awards ?? [];
+  const awardsRes = await supabase
+    .from("point_awards")
+    .select("prediction_type, points, awarded_at")
+    .eq("user_id", userId)
+    .order("awarded_at");
+
+  const picksRes = isSelf
+    ? await supabase.from("match_predictions").select("id").eq("user_id", userId)
+    : null;
+
+  const safeAwards = awardsRes.data ?? [];
   const matchAwards = safeAwards.filter((a) => a.prediction_type === "match");
   const totalPoints = safeAwards.reduce((sum, a) => sum + (a.points ?? 0), 0);
   const matchPoints = matchAwards.reduce((sum, a) => sum + (a.points ?? 0), 0);
@@ -37,9 +46,12 @@ export async function loadProfileStats(userId: string): Promise<ProfileStats> {
     .filter((a) => a.prediction_type === "prop")
     .reduce((sum, a) => sum + (a.points ?? 0), 0);
 
-  const picksMade = (picks ?? []).length;
   const picksScored = matchAwards.length;
-  const accuracy = picksMade ? Math.round((picksScored / picksMade) * 100) : 0;
+  const picksMade = picksRes ? (picksRes.data ?? []).length : null;
+  const accuracy =
+    picksMade !== null && picksMade > 0
+      ? Math.round((picksScored / picksMade) * 100)
+      : null;
 
   const byDay = new Map<string, number>();
   for (const a of safeAwards) {

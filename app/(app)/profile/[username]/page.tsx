@@ -10,14 +10,17 @@ export default async function ProfilePage({
 }) {
   const { username } = await params;
   const supabase = await supabaseServer();
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id, username, display_name, avatar_url, created_at")
-    .eq("username", username)
-    .maybeSingle();
+  const [{ data: profile }, { data: viewerData }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("id, username, display_name, avatar_url, created_at")
+      .eq("username", username)
+      .maybeSingle(),
+    supabase.auth.getUser(),
+  ]);
   if (!profile) notFound();
 
-  const stats = await loadProfileStats(profile.id);
+  const stats = await loadProfileStats(profile.id, viewerData.user?.id);
 
   return (
     <main className="max-w-4xl mx-auto px-4 py-8 flex flex-col gap-6">
@@ -29,8 +32,8 @@ export default async function ProfilePage({
 
       <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Stat label="Total points" value={stats.totalPoints} />
-        <Stat label="Accuracy (1X2)" value={`${stats.accuracy}%`} />
-        <Stat label="Picks made" value={stats.picksMade} />
+        {stats.accuracy !== null && <Stat label="Accuracy (1X2)" value={`${stats.accuracy}%`} />}
+        {stats.picksMade !== null && <Stat label="Picks made" value={stats.picksMade} />}
         <Stat label="Correct" value={stats.picksScored} />
       </section>
 

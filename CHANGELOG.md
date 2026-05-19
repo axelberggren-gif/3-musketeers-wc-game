@@ -13,11 +13,20 @@ After committing your change, run `git commit --amend --no-edit` once to backfil
 ## [Unreleased]
 
 ### Added
+- 2026-05-19 (`pending`) Vitest unit tests for scoring rules, lock state, and football-data mappers; wired into CI — @?
+- 2026-05-19 (`pending`) `unwrapRelation` helper centralises the PostgREST single-vs-array embedded-relation cast — @?
 
 ### Changed
+- 2026-05-19 (`pending`) `syncFixtures` prefetches teams (eliminating ~128 round-trips/run) and invokes `score_tournament` once the Final lands — @?
+- 2026-05-19 (`pending`) `overrideMatchResult` re-scores the tournament after an admin override and validates score inputs server-side — @?
+- 2026-05-19 (`pending`) `loadProfileStats` gates accuracy on the viewer being the profile owner — @?
 
 ### Fixed
+- 2026-05-19 (`pending`) P0: bracket scoring was a no-op because `matches.bracket_slot` was never populated; sync now derives it deterministically per knockout stage — @?
+- 2026-05-19 (`pending`) `score_bracket` / `score_tournament` returned only the last INSERT's row count; both now accumulate across every insert — @?
+- 2026-05-19 (`pending`) Invite redemption race (concurrent joins could exceed `max_uses`) replaced with atomic `redeem_league_invite` RPC — @?
 
 ### Removed
 
 ### Infra
+- 2026-05-19 (`pending`) Migration 0004: row-count fixes for `score_bracket`/`score_tournament` plus `redeem_league_invite` RPC — @?

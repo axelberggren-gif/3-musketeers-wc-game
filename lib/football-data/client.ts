@@ -107,6 +107,29 @@ export function mapStage(stage: FdMatch["stage"]) {
   }
 }
 
+export type LocalStage = ReturnType<typeof mapStage>;
+
+// Slot labels mirror components/predict/BracketBuilder.tsx and the score_bracket
+// SQL function: R16-1..8, QF-A..D, SF-A..B, F. Index is the match's order within
+// its stage by kickoff time — the deterministic schedule means R16-1 is always
+// the first R16 match.
+export function deriveBracketSlot(stage: LocalStage, indexInStage: number): string | null {
+  switch (stage) {
+    case "R16":
+      return `R16-${indexInStage + 1}`;
+    case "QF":
+      return `QF-${String.fromCharCode(65 + indexInStage)}`;
+    case "SF":
+      return `SF-${String.fromCharCode(65 + indexInStage)}`;
+    case "F":
+      return "F";
+    case "3RD":
+      return "3RD";
+    default:
+      return null;
+  }
+}
+
 export function mapWinner(winner: FdMatch["score"]["winner"]) {
   if (!winner) return null;
   if (winner === "HOME_TEAM") return "HOME" as const;

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { supabaseServer } from "@/lib/supabase/server";
+import { unwrapRelation } from "@/lib/utils";
 import { CreateLeagueForm } from "./CreateLeagueForm";
 import { Trophy, Users } from "lucide-react";
 
@@ -15,18 +16,20 @@ export default async function LeaguesPage() {
     .select("role, league:league_id(id, slug, name, description, owner_id)")
     .eq("user_id", user.id);
 
-  const leagues = (memberships ?? []).map((m) => ({
-    role: m.role as "owner" | "member",
-    league: (Array.isArray(m.league) ? m.league[0] : m.league) as {
-      id: string;
-      slug: string;
-      name: string;
-      description: string | null;
-      owner_id: string;
-    } | null,
-  })).filter((m) => m.league);
+  type LeagueRow = {
+    id: string;
+    slug: string;
+    name: string;
+    description: string | null;
+    owner_id: string;
+  };
+  const leagues = (memberships ?? [])
+    .map((m) => ({
+      role: m.role as "owner" | "member",
+      league: unwrapRelation(m.league as LeagueRow | LeagueRow[] | null),
+    }))
+    .filter((m): m is { role: "owner" | "member"; league: LeagueRow } => m.league !== null);
 
-  // Member counts (one extra query, keeps types simple)
   const counts: Record<string, number> = {};
   if (leagues.length) {
     const { data: countRows } = await supabase
@@ -34,7 +37,7 @@ export default async function LeaguesPage() {
       .select("league_id")
       .in(
         "league_id",
-        leagues.map((m) => m.league!.id),
+        leagues.map((m) => m.league.id),
       );
     for (const row of countRows ?? []) {
       counts[row.league_id as string] = (counts[row.league_id as string] ?? 0) + 1;
@@ -59,22 +62,22 @@ export default async function LeaguesPage() {
         <div className="grid sm:grid-cols-2 gap-3">
           {leagues.map(({ league, role }) => (
             <Link
-              key={league!.id}
-              href={`/leagues/${league!.slug}`}
+              key={league.id}
+              href={`/leagues/${league.slug}`}
               className="card flex flex-col gap-2 hover:border-[var(--accent)] transition-colors"
             >
               <div className="flex items-center justify-between">
                 <h2 className="font-semibold flex items-center gap-2">
-                  <Trophy className="w-4 h-4 text-[var(--accent)]" /> {league!.name}
+                  <Trophy className="w-4 h-4 text-[var(--accent)]" /> {league.name}
                 </h2>
                 {role === "owner" && <span className="badge">Owner</span>}
               </div>
-              {league!.description && (
-                <p className="text-sm text-[var(--muted)] line-clamp-2">{league!.description}</p>
+              {league.description && (
+                <p className="text-sm text-[var(--muted)] line-clamp-2">{league.description}</p>
               )}
               <p className="text-xs text-[var(--muted)] flex items-center gap-1">
-                <Users className="w-3 h-3" /> {counts[league!.id] ?? 1} member
-                {(counts[league!.id] ?? 1) === 1 ? "" : "s"}
+                <Users className="w-3 h-3" /> {counts[league.id] ?? 1} member
+                {(counts[league.id] ?? 1) === 1 ? "" : "s"}
               </p>
             </Link>
           ))}

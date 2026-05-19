@@ -1,9 +1,22 @@
 import { supabaseService } from "@/lib/supabase/server";
-import { FootballDataClient, mapStage, mapStatus, mapWinner } from "./client";
+import {
+  FootballDataClient,
+  deriveBracketSlot,
+  mapStage,
+  mapStatus,
+  mapWinner,
+  type FdMatch,
+} from "./client";
 
 const SOURCE = "football-data.org";
 
-async function log(supabase: ReturnType<typeof supabaseService>, endpoint: string, message: string, payload?: unknown, status_code?: number) {
+async function log(
+  supabase: ReturnType<typeof supabaseService>,
+  endpoint: string,
+  message: string,
+  payload?: unknown,
+  status_code?: number,
+) {
   await supabase.from("external_sync_log").insert({
     source: SOURCE,
     endpoint,
@@ -19,38 +32,31 @@ export async function seedTeams() {
   try {
     const { teams } = await fd.teams();
     for (const t of teams) {
-      await supabase.from("teams").upsert(
-        {
-          external_id: t.id,
-          name: t.name,
-          short_name: t.shortName ?? t.name,
-          code: t.tla ?? t.name.slice(0, 3).toUpperCase(),
-          crest_url: t.crest,
-        },
-        { onConflict: "external_id" },
-      );
-      if (t.squad?.length) {
-        const rows = t.squad.map((p) => ({
-          external_id: p.id,
-          name: p.name,
-          position: p.position,
-        }));
-        // First upsert player base, then patch team_id (need the local team uuid)
-        await supabase.from("players").upsert(rows, { onConflict: "external_id" });
-        const { data: localTeam } = await supabase
-          .from("teams")
-          .select("id")
-          .eq("external_id", t.id)
-          .single();
-        if (localTeam) {
-          await supabase
-            .from("players")
-            .update({ team_id: localTeam.id })
-            .in(
-              "external_id",
-              t.squad.map((p) => p.id),
-            );
-        }
+      const { data: localTeam } = await supabase
+        .from("teams")
+        .upsert(
+          {
+            external_id: t.id,
+            name: t.name,
+            short_name: t.shortName ?? t.name,
+            code: t.tla ?? t.name.slice(0, 3).toUpperCase(),
+            crest_url: t.crest,
+          },
+          { onConflict: "external_id" },
+        )
+        .select("id")
+        .single();
+
+      if (t.squad?.length && localTeam) {
+        await supabase.from("players").upsert(
+          t.squad.map((p) => ({
+            external_id: p.id,
+            name: p.name,
+            position: p.position,
+            team_id: localTeam.id,
+          })),
+          { onConflict: "external_id" },
+        );
       }
     }
     await log(supabase, "/teams", `Seeded ${teams.length} teams`, { count: teams.length });
@@ -67,22 +73,34 @@ export async function syncFixtures() {
   const fd = new FootballDataClient();
   try {
     const { matches } = await fd.matches();
+
+    const { data: allTeams } = await supabase.from("teams").select("id, external_id");
+    const teamByExternal = new Map<number, string>();
+    for (const t of allTeams ?? []) {
+      if (t.external_id != null) teamByExternal.set(t.external_id, t.id);
+    }
+
+    const bracketSlotByExternalId = buildBracketSlotMap(matches);
+
     let inserted = 0;
     let scored = 0;
     const finishedIds: string[] = [];
     let hadKnockout = false;
+    let finalFinished = false;
 
     for (const m of matches) {
-      const homeUuid = m.homeTeam.id ? await teamUuidByExternal(supabase, m.homeTeam.id) : null;
-      const awayUuid = m.awayTeam.id ? await teamUuidByExternal(supabase, m.awayTeam.id) : null;
+      const homeUuid = m.homeTeam.id ? teamByExternal.get(m.homeTeam.id) ?? null : null;
+      const awayUuid = m.awayTeam.id ? teamByExternal.get(m.awayTeam.id) ?? null : null;
 
       const localStage = mapStage(m.stage);
       const isKnockout = localStage !== "GROUP";
+      const bracketSlot = bracketSlotByExternalId.get(m.id) ?? null;
 
       const payload = {
         external_id: m.id,
         stage: localStage,
         group_letter: m.group ? m.group.replace("Group ", "").slice(0, 1) : null,
+        bracket_slot: bracketSlot,
         kickoff_at: m.utcDate,
         home_team_id: homeUuid,
         away_team_id: awayUuid,
@@ -101,18 +119,21 @@ export async function syncFixtures() {
 
       if (upserted && payload.status === "FINISHED" && payload.winner) {
         finishedIds.push(upserted.id);
+        if (bracketSlot === "F") finalFinished = true;
       }
       if (isKnockout) hadKnockout = true;
       inserted++;
     }
 
-    // Score newly finished matches
     for (const id of finishedIds) {
       const { data, error } = await supabase.rpc("score_match", { p_match_id: id });
       if (!error && typeof data === "number") scored += data;
     }
     if (hadKnockout) {
       await supabase.rpc("score_bracket");
+    }
+    if (finalFinished) {
+      await supabase.rpc("score_tournament");
     }
     try {
       await supabase.rpc("refresh_league_standings");
@@ -148,14 +169,25 @@ export async function syncScorers() {
   }
 }
 
-async function teamUuidByExternal(
-  supabase: ReturnType<typeof supabaseService>,
-  external_id: number,
-) {
-  const { data } = await supabase
-    .from("teams")
-    .select("id")
-    .eq("external_id", external_id)
-    .maybeSingle();
-  return data?.id ?? null;
+// Assign bracket_slot deterministically per knockout stage by kickoff order.
+// FIFA's schedule is fixed once the draw is set, so the first R16 match by
+// kickoff is always R16-1, the first QF is QF-A, etc.
+function buildBracketSlotMap(matches: FdMatch[]): Map<number, string> {
+  const byStage = new Map<string, FdMatch[]>();
+  for (const m of matches) {
+    const stage = mapStage(m.stage);
+    if (stage === "GROUP") continue;
+    const arr = byStage.get(stage) ?? [];
+    arr.push(m);
+    byStage.set(stage, arr);
+  }
+  const result = new Map<number, string>();
+  for (const [stage, group] of byStage.entries()) {
+    group.sort((a, b) => a.utcDate.localeCompare(b.utcDate));
+    group.forEach((m, idx) => {
+      const slot = deriveBracketSlot(stage as ReturnType<typeof mapStage>, idx);
+      if (slot) result.set(m.id, slot);
+    });
+  }
+  return result;
 }

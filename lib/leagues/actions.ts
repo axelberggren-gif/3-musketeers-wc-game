@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
-import { randomToken } from "@/lib/utils";
+import { randomToken, unwrapRelation } from "@/lib/utils";
 
 function slugify(name: string) {
   return name
@@ -94,8 +94,12 @@ export async function revokeInvite(inviteId: string, leagueSlug: string) {
     .select("league_id, leagues(owner_id)")
     .eq("id", inviteId)
     .single();
-  const owner = (Array.isArray(invite?.leagues) ? invite?.leagues[0] : invite?.leagues)?.owner_id;
-  if (!invite || owner !== user.id) return { ok: false, error: "Forbidden" } as const;
+  const ownerRel = unwrapRelation(
+    invite?.leagues as { owner_id: string } | { owner_id: string }[] | null,
+  );
+  if (!invite || ownerRel?.owner_id !== user.id) {
+    return { ok: false, error: "Forbidden" } as const;
+  }
   const { error } = await service.from("league_invites").update({ revoked: true }).eq("id", inviteId);
   if (error) return { ok: false, error: error.message } as const;
   revalidatePath(`/leagues/${leagueSlug}/members`);

@@ -39,3 +39,4 @@ Actual point-awarding writes happen in SQL functions (see `supabase/migrations/0
 
 ## Recent changes
 <!-- Newest first. Keep last 10. One line per entry. -->
+- 2026-05-19: Added vitest unit tests (`rules.test.ts`, `lock.test.ts`) so a points-sync drift between `rules.ts` and SQL surfaces in CI.

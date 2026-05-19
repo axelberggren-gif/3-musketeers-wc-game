@@ -31,11 +31,17 @@ in `app/api/cron/` and from admin actions.
 ## Known gotchas
 - football-data's `stage` enum doesn't have a direct mapping for our `3RD` (third
   place playoff); see `mapStage()` in `client.ts` if you add new stages.
-- `seedTeams()` does a two-step player upsert (insert base row first, then patch
-  `team_id`) because the local team UUID is only known after the team upsert.
-- `syncFixtures()` calls SQL RPCs `score_match`, `score_bracket`, and
-  `refresh_league_standings` after upserting finished matches. Those functions live
-  in migration 0002 — keep them in sync.
+- `seedTeams()` upserts the team first (returning its local UUID) and then upserts
+  players with `team_id` set in the same call — no second pass needed.
+- `syncFixtures()` calls SQL RPCs `score_match`, `score_bracket`,
+  `score_tournament` (only once the Final is FINISHED), and
+  `refresh_league_standings` after upserting matches. Those functions live in
+  migrations 0002 and 0004 — keep them in sync.
+- `syncFixtures()` derives `bracket_slot` per knockout match by sorting matches
+  within each stage by `utcDate` (R16-1..8 / QF-A..D / SF-A..B / F). Without
+  this, `score_bracket()` would never join.
 
 ## Recent changes
 <!-- Newest first. Keep last 10. One line per entry. -->
+- 2026-05-19: `syncFixtures` prefetches teams (one query instead of ~128), derives `bracket_slot` deterministically per knockout stage, and invokes `score_tournament` when the Final lands.
+- 2026-05-19: `seedTeams` collapses the two-pass player upsert into a single call with `team_id` populated.
