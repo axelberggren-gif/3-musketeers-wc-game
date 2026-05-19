@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# per-developer Claude Code identity (initials + name for branch names / CHANGELOG)
+/.claude-identity
