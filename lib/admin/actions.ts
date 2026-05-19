@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { seedTeams, syncFixtures, syncScorers } from "@/lib/football-data/sync";
+import { FootballDataClient } from "@/lib/football-data/client";
 
 async function assertAdmin() {
   const supabase = await supabaseServer();
@@ -47,6 +48,20 @@ export async function runSyncScorers() {
     const result = await syncScorers();
     revalidatePath("/admin");
     return { ok: true, ...result } as const;
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) } as const;
+  }
+}
+
+export async function runCheckToken() {
+  await assertAdmin();
+  try {
+    const { teams } = await new FootballDataClient().teams();
+    return {
+      ok: true,
+      teams: teams.length,
+      sample: teams[0]?.name ?? null,
+    } as const;
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) } as const;
   }

@@ -1,4 +1,4 @@
-import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { computeLockState } from "@/lib/scoring/lock";
 import { MatchPickCard, type MatchPickRow } from "@/components/predict/MatchPickCard";
 import { TournamentForm } from "@/components/predict/TournamentForm";
@@ -14,7 +14,8 @@ export default async function Round1Page() {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const [tournamentRes, matchesRes, picksRes, tpRes, propsRes, teamsRes, playersRes] =
+  const service = supabaseService();
+  const [tournamentRes, matchesRes, picksRes, tpRes, propsRes, teamsRes, playersRes, lastSyncRes] =
     await Promise.all([
       supabase.from("tournament").select("*").single(),
       supabase
@@ -37,6 +38,13 @@ export default async function Round1Page() {
         .select("id, name, team:team_id(name)")
         .order("name")
         .limit(1000),
+      service
+        .from("external_sync_log")
+        .select("ran_at, endpoint, status_code, message")
+        .eq("source", "football-data.org")
+        .order("ran_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
 
   const tournament = tournamentRes.data;
@@ -61,6 +69,9 @@ export default async function Round1Page() {
     name: p.name,
     team_name: (Array.isArray(p.team) ? p.team[0] : p.team)?.name ?? null,
   }));
+  const lastSync = lastSyncRes.data as
+    | { ran_at: string; endpoint: string; status_code: number | null; message: string | null }
+    | null;
 
   // Group matches by date for nicer layout
   const grouped = matches.reduce<Record<string, typeof matches>>((acc, m) => {
@@ -107,10 +118,25 @@ export default async function Round1Page() {
           <span className="text-sm text-[var(--muted)]">{matches.length} matches</span>
         </div>
         {matches.length === 0 && (
-          <p className="text-sm text-[var(--muted)]">
-            Group-stage fixtures haven&rsquo;t been seeded yet. An admin needs to run the
-            football-data sync.
-          </p>
+          <div className="flex flex-col gap-1 text-sm text-[var(--muted)]">
+            <p>
+              Group-stage fixtures haven&rsquo;t been seeded yet. An admin needs to run the
+              football-data sync.
+            </p>
+            {lastSync ? (
+              <p className="font-mono text-xs">
+                Last sync attempt {new Date(lastSync.ran_at).toLocaleString()} ·{" "}
+                {lastSync.endpoint}
+                {lastSync.status_code ? ` · HTTP ${lastSync.status_code}` : ""} ·{" "}
+                {lastSync.message ?? "(no message)"}
+              </p>
+            ) : (
+              <p className="font-mono text-xs">
+                No sync has run yet — check FOOTBALL_DATA_TOKEN, CRON_SECRET, and the
+                app.cron_app_url / app.cron_secret Postgres GUCs.
+              </p>
+            )}
+          </div>
         )}
         {Object.entries(grouped).map(([date, group]) => (
           <div key={date} className="flex flex-col gap-3">
