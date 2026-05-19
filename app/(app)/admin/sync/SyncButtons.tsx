@@ -1,25 +1,42 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { runSeedTeams, runSyncFixtures, runSyncScorers } from "@/lib/admin/actions";
+import {
+  runCheckToken,
+  runSeedTeams,
+  runSyncFixtures,
+  runSyncScorers,
+} from "@/lib/admin/actions";
+
+type ActionResult = { ok: boolean; error?: string } & Record<string, unknown>;
 
 export function SyncButtons() {
   const [pending, startTransition] = useTransition();
   const [log, setLog] = useState<string[]>([]);
 
-  function run(name: string, fn: () => Promise<{ ok: boolean; error?: string }>) {
+  function run(name: string, fn: () => Promise<ActionResult>) {
     startTransition(async () => {
       const result = await fn();
-      setLog((l) => [
-        `[${new Date().toLocaleTimeString()}] ${name}: ${result.ok ? "ok" : `error — ${result.error}`}`,
-        ...l,
-      ]);
+      const detail = result.ok
+        ? Object.entries(result)
+            .filter(([k]) => k !== "ok")
+            .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+            .join(" ") || "ok"
+        : `error — ${result.error}`;
+      setLog((l) => [`[${new Date().toLocaleTimeString()}] ${name}: ${detail}`, ...l]);
     });
   }
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap gap-2">
+        <button
+          onClick={() => run("Check token", runCheckToken)}
+          disabled={pending}
+          className="btn btn-secondary"
+        >
+          Check token
+        </button>
         <button
           onClick={() => run("Seed teams + players", runSeedTeams)}
           disabled={pending}
