@@ -1,3 +1,5 @@
+> **Canon** — current source of truth for this directory. If reality and this file disagree, fix this file in the same PR.
+
 # lib/scoring/ — points config + match-lock logic
 
 ## Purpose

@@ -1,3 +1,5 @@
+> **Canon** — current source of truth for this directory. If reality and this file disagree, fix this file in the same PR.
+
 # app/ — Next.js 16 App Router
 
 ## Purpose

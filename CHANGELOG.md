@@ -1,5 +1,7 @@
 # Changelog
 
+> **Non-canon** — historical record. Entries describe state at the time of the PR and may be stale; do not treat as current behaviour. For canonical behaviour, read the per-directory `CLAUDE.md`.
+
 All notable changes to this project. Each PR appends one line to the relevant subsection,
 newest first. Entry format:
 
@@ -29,4 +31,5 @@ After committing your change, run `git commit --amend --no-edit` once to backfil
 ### Removed
 
 ### Infra
+- 2026-05-20 (`pending`) Agent-native tooling pass: `verifier` subagent, husky pre-commit (lint+typecheck), canon/non-canon banners on every `CLAUDE.md` and `CHANGELOG`, `/.claude-identity.example` template, GitHub Issues codified as the tracker — @ax
 - 2026-05-19 (`pending`) Migration 0004: row-count fixes for `score_bracket`/`score_tournament` plus `redeem_league_invite` RPC — @?
