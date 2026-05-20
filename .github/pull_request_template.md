@@ -2,7 +2,11 @@
 <!-- One sentence describing the change. -->
 
 ## Why
-<!-- 1–3 bullets on motivation / linked issue. -->
+<!-- 1–3 bullets on motivation. -->
+
+## Related issues
+<!-- "Closes #N" auto-closes the issue on merge; "Refs #N" links without closing. -->
+- Closes #
 
 ## How (only if non-obvious)
 <!-- Brief notes on the approach. -->

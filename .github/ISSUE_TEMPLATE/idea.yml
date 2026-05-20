@@ -1,0 +1,26 @@
+name: Idea
+description: New feature, enhancement, or design discussion.
+title: "<idea summary>"
+labels: ["type:idea"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user need or pain point does this address?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: Rough sketch of the solution. Keep it brief — details emerge during refinement.
+    validations:
+      required: false
+  - type: textarea
+    id: open_questions
+    attributes:
+      label: Open questions
+      description: What's unclear or up for debate?
+    validations:
+      required: false
