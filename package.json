@@ -9,7 +9,8 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "db:types": "supabase gen types typescript --local > lib/supabase/types.ts"
+    "db:types": "supabase gen types typescript --local > lib/supabase/types.ts",
+    "prepare": "husky"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.1",
@@ -30,6 +31,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
+    "husky": "^9.1.7",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.6"

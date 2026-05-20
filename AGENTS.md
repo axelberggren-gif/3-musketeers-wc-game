@@ -1,3 +1,5 @@
+> **Canon** — current source of truth. If reality and this file disagree, fix this file in the same PR.
+
 <!-- BEGIN:nextjs-agent-rules -->
 # This is NOT the Next.js you know
 
@@ -29,7 +31,8 @@ import in `CLAUDE.md`. Other agents read it directly.
 5. Verify your git identity: `git config user.name` must be a **human name**, not
    "Claude". If wrong, ask the human to fix — never set it yourself.
 6. Read `/.claude-identity` (gitignored) for the human's initials, used in branch
-   names and CHANGELOG attributions. If missing, ask the human once.
+   names and CHANGELOG attributions. If missing, ask the human to copy
+   `/.claude-identity.example` to `/.claude-identity` and fill it in.
 
 ## Per-directory CLAUDE.md map
 
@@ -103,6 +106,14 @@ commit on `main` — title must be Conventional Commits format.
 6. Wait for `ci` + `pr-title-lint` checks to be green. No reviewer approval
    required (no-ownership policy), but checks are required.
 7. Squash-merge.
+
+### Task tracking
+
+GitHub Issues is the team's tracker — use the GitHub MCP tools available in
+Claude Code sessions to read, create, and comment on issues. Reference issue
+IDs in **PR descriptions** and **commit trailers** only (e.g. `Refs: #42`);
+never in source code, code comments, or any `CLAUDE.md`. The codebase stays
+tracker-agnostic so we can switch trackers later without a search-and-replace.
 
 ## Required scripts (already in `package.json`)
 
