@@ -109,11 +109,36 @@ commit on `main` — title must be Conventional Commits format.
 
 ### Task tracking
 
-GitHub Issues is the team's tracker — use the GitHub MCP tools available in
-Claude Code sessions to read, create, and comment on issues. Reference issue
-IDs in **PR descriptions** and **commit trailers** only (e.g. `Refs: #42`);
-never in source code, code comments, or any `CLAUDE.md`. The codebase stays
-tracker-agnostic so we can switch trackers later without a search-and-replace.
+GitHub Issues is the team's tracker, organised as a kanban board via a
+GitHub Project on the repo. Use the GitHub MCP tools available in Claude
+Code sessions to read, create, and comment on issues. Reference issue IDs
+in **PR descriptions** and **commit trailers** only (e.g. `Closes #42` or
+`Refs: #42`); never in source code, code comments, or any `CLAUDE.md`.
+The codebase stays tracker-agnostic so we can switch trackers later
+without a search-and-replace.
+
+**Filing**: pick one of the issue forms in `.github/ISSUE_TEMPLATE/`
+(`Task`, `Bug`, `Idea`). Blank issues are disabled. Templates auto-apply
+the matching `type:*` label.
+
+**Labels** (declared in `.github/labels.yml`, synced by the
+`sync-labels` workflow on push-to-main or manual dispatch):
+
+- `type:*` — `bug`, `idea`, `task`, `docs`. Auto-applied by the template.
+- `area:*` — `scoring`, `predict`, `admin`, `supabase`, `football-data`,
+  `infra`, `ui`. Apply at least one during triage.
+- `prio:*` — `P0` (blocks shipping), `P1` (important), `P2` (nice to have).
+- `status:blocked` — waiting on something. Use sparingly; the Project
+  column should already reflect status.
+- `good-first-issue` — small, well-scoped pickups.
+
+**Board** (GitHub Project on the repo, created in the GitHub UI):
+columns are `Backlog` → `Up next` → `In progress` → `In review` → `Done`.
+Enable the Project's built-in workflows so linking a PR with `Closes #N`
+moves the issue to `In review` on PR open and `Done` on merge.
+
+**Closing**: PR descriptions use `Closes #N` to auto-close the issue at
+merge. For multi-PR work or partial progress, use `Refs: #N` instead.
 
 ## Required scripts (already in `package.json`)
 

@@ -31,5 +31,6 @@ After committing your change, run `git commit --amend --no-edit` once to backfil
 ### Removed
 
 ### Infra
+- 2026-05-20 (`pending`) GitHub Issues tracker scaffolded: issue forms (Task/Bug/Idea), `.github/labels.yml` + `sync-labels` workflow, PR template gets a `Closes #N` slot, AGENTS.md documents the kanban workflow — @ax
 - 2026-05-20 (`pending`) Agent-native tooling pass: `verifier` subagent, husky pre-commit (lint+typecheck), canon/non-canon banners on every `CLAUDE.md` and `CHANGELOG`, `/.claude-identity.example` template, GitHub Issues codified as the tracker — @ax
 - 2026-05-19 (`pending`) Migration 0004: row-count fixes for `score_bracket`/`score_tournament` plus `redeem_league_invite` RPC — @?

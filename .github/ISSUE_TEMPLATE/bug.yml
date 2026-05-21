@@ -1,0 +1,36 @@
+name: Bug
+description: Something is broken or behaves incorrectly.
+title: "<one-sentence symptom>"
+labels: ["type:bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One sentence describing what's wrong.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs actual
+      description: What did you expect? What actually happened?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Route, commit hash, browser, logs, screenshot — anything that narrows it down.
+    validations:
+      required: false

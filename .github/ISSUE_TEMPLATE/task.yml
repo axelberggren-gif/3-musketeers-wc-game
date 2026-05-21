@@ -1,0 +1,47 @@
+name: Task
+description: General work item — chore, refactor, small feature, follow-up.
+title: "<short imperative summary>"
+labels: ["type:task"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What
+      description: One-sentence summary of the work.
+      placeholder: e.g. "Add tiebreaker on away-pick accuracy."
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: Brief motivation — what problem this solves or why it matters now.
+    validations:
+      required: false
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: How will we know it's done? Short bulleted checklist.
+      value: |
+        - [ ]
+        - [ ]
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Primary area touched (apply the matching `area:*` label after triage).
+      multiple: false
+      options:
+        - scoring
+        - predict
+        - admin
+        - supabase
+        - football-data
+        - infra
+        - ui
+        - other
+    validations:
+      required: false
