@@ -1,28 +1,16 @@
 "use client";
 
-import { useTransition, useState } from "react";
-import { useRouter } from "next/navigation";
-import { createLeague } from "@/lib/leagues/actions";
+import { useActionState } from "react";
+import { createLeague, type CreateLeagueState } from "@/lib/leagues/actions";
 
 export function CreateLeagueForm() {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-
-  function handleSubmit(formData: FormData) {
-    setError(null);
-    startTransition(async () => {
-      const result = await createLeague(formData);
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-      router.push(`/leagues/${result.slug}`);
-    });
-  }
+  const [state, formAction, pending] = useActionState<CreateLeagueState, FormData>(
+    createLeague,
+    null,
+  );
 
   return (
-    <form action={handleSubmit} className="flex flex-col gap-3">
+    <form action={formAction} className="flex flex-col gap-3">
       <div className="flex flex-col gap-1">
         <label htmlFor="name" className="label">
           Name
@@ -35,7 +23,7 @@ export function CreateLeagueForm() {
         </label>
         <textarea id="description" name="description" className="input" rows={2} />
       </div>
-      {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
+      {state?.error && <p className="text-sm text-[var(--danger)]">{state.error}</p>}
       <button type="submit" disabled={pending} className="btn btn-primary self-start">
         {pending ? "Creating…" : "Create league"}
       </button>
