@@ -1,8 +1,15 @@
 "use client";
 
-import { setTournamentPick, setPlayerProp } from "@/lib/predictions/actions";
+import {
+  setTournamentPick,
+  setPlayerProp,
+  setTotalGoalsGuess,
+  setHighestMatchGoalsGuess,
+  setFirstEliminatedPick,
+} from "@/lib/predictions/actions";
 import { TeamSelect, type TeamOption } from "./TeamSelect";
 import { PlayerSelect, type PlayerOption } from "./PlayerSelect";
+import { NumberInput } from "./NumberInput";
 
 interface Props {
   teams: TeamOption[];
@@ -12,6 +19,9 @@ interface Props {
     runner_up_team_id: string | null;
     top_scorer_player_id: string | null;
     dark_horse_team_id: string | null;
+    first_eliminated_team_id: string | null;
+    total_goals_guess: number | null;
+    highest_match_goals_guess: number | null;
   };
   propPicks: Record<string, string | null>;
   propDefs: { key: string; label: string }[];
@@ -36,10 +46,11 @@ export function TournamentForm({ teams, players, initial, propPicks, propDefs, l
         onSave={(id) => setTournamentPick({ runner_up_team_id: id })}
       />
       <TeamSelect
-        label="Dark horse — reaches SF (10 pts)"
+        label="Dark horse — pts = FIFA rank if pick reaches QF"
         options={teams}
         initial={initial.dark_horse_team_id}
         disabled={locked}
+        showRanking
         onSave={(id) => setTournamentPick({ dark_horse_team_id: id })}
       />
       <PlayerSelect
@@ -48,6 +59,39 @@ export function TournamentForm({ teams, players, initial, propPicks, propDefs, l
         initial={initial.top_scorer_player_id}
         disabled={locked}
         onSave={(id) => setTournamentPick({ top_scorer_player_id: id })}
+      />
+      <NumberInput
+        label="Total goals — whole tournament (20 pts, closest wins, ties split)"
+        initial={initial.total_goals_guess}
+        min={0}
+        max={300}
+        disabled={locked}
+        onSave={setTotalGoalsGuess}
+      />
+      <NumberInput
+        label="Highest-scoring match — goal count (15 pts, closest wins, ties split)"
+        initial={initial.highest_match_goals_guess}
+        min={0}
+        max={30}
+        disabled={locked}
+        onSave={setHighestMatchGoalsGuess}
+      />
+      <TeamSelect
+        label="First team eliminated (10 pts)"
+        options={teams}
+        initial={initial.first_eliminated_team_id}
+        disabled={locked}
+        onSave={setFirstEliminatedPick}
+      />
+      <PlayerSelect
+        label="Troublemaker — most card weight, Y=1 / R=2 (15 pts)"
+        options={players}
+        initial={propPicks["troublemaker"] ?? null}
+        disabled={locked}
+        onSave={async (id) => {
+          if (!id) return { ok: true };
+          return setPlayerProp("troublemaker", id);
+        }}
       />
       {propDefs.map((p) => (
         <PlayerSelect

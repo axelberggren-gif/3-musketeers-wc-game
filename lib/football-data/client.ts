@@ -22,12 +22,20 @@ export interface FdMatch {
     fullTime: { home: number | null; away: number | null };
   };
   goals?: FdGoal[];
+  bookings?: FdBooking[];
 }
 
 export interface FdGoal {
   minute: number | null;
   scorer: { id: number; name: string };
   team: { id: number; name: string };
+}
+
+export interface FdBooking {
+  minute: number | null;
+  team:   { id: number; name: string };
+  player: { id: number; name: string };
+  card:   "YELLOW" | "RED" | "YELLOW_RED";
 }
 
 export interface FdTeam {

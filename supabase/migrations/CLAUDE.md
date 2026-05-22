@@ -48,4 +48,5 @@ schedule that polls football-data.org.
 
 ## Recent changes
 <!-- Newest first. Keep last 10. One line per entry. -->
+- 2026-05-22: `0005_more_tournament_props.sql` — five new tournament-wide props (total goals, highest-match goals, troublemaker, group winners ×12, first eliminated); rewrites dark-horse scoring as rank-based (`teams.fifa_ranking`); adds `matches.details_synced_at` marker; extends `score_tournament` to chain into the new scorers.
 - 2026-05-19: `0004_score_fixes.sql` — accumulate row counts across all INSERTs in `score_bracket`/`score_tournament`; add `redeem_league_invite(token, user_id)` for atomic invite consumption.

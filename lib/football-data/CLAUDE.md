@@ -36,14 +36,23 @@ in `app/api/cron/` and from admin actions.
 - `seedTeams()` upserts the team first (returning its local UUID) and then upserts
   players with `team_id` set in the same call — no second pass needed.
 - `syncFixtures()` calls SQL RPCs `score_match`, `score_bracket`,
-  `score_tournament` (only once the Final is FINISHED), and
+  `score_tournament` (only once the Final is FINISHED),
+  `settle_group_stage_props` (per-group + first-eliminated props), and
   `refresh_league_standings` after upserting matches. Those functions live in
-  migrations 0002 and 0004 — keep them in sync.
+  migrations 0002, 0004 and 0005 — keep them in sync.
 - `syncFixtures()` derives `bracket_slot` per knockout match by sorting matches
   within each stage by `utcDate` (R16-1..8 / QF-A..D / SF-A..B / F). Without
   this, `score_bracket()` would never join.
+- `syncFixtures()` also drains up to **5 per-match detail fetches** per run via
+  `drainPendingMatchDetails()`: any FINISHED match with `details_synced_at IS NULL`
+  is hit on `/matches/{id}` to pick up goals + bookings, then marked. The 5-per-run
+  cap keeps total requests under the 10/min budget (list endpoint = 1, details =
+  up to 5, leaves a 4-call buffer). Free-tier responses sometimes omit `bookings`;
+  the troublemaker prop relies on this and silently scores no one if so — a
+  warning is logged to `external_sync_log`.
 
 ## Recent changes
 <!-- Newest first. Keep last 10. One line per entry. -->
+- 2026-05-22: `syncFixtures` drains up to 5 per-match detail fetches per run into `player_goal_log` / new `player_card_log` (gated on `matches.details_synced_at`); calls `settle_group_stage_props` RPC for progressive group-winner / first-eliminated scoring. `FdBooking` interface + `FdMatch.bookings?` added.
 - 2026-05-19: `syncFixtures` prefetches teams (one query instead of ~128), derives `bracket_slot` deterministically per knockout stage, and invokes `score_tournament` when the Final lands.
 - 2026-05-19: `seedTeams` collapses the two-pass player upsert into a single call with `team_id` populated.

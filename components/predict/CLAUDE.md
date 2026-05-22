@@ -15,7 +15,13 @@ server pages.
   slot is a `<select>` over surviving teams.
 - `CountdownBanner.tsx` — Live countdown to first kickoff / knockout lock.
 - `PlayerSelect.tsx`, `TeamSelect.tsx` — Generic selectors used in tournament/player
-  prop forms.
+  prop forms. `TeamSelect` supports an optional `showRanking` prop that sorts by
+  `fifa_ranking desc` and labels each option `#<rank> — <name>` (used by the
+  dark-horse picker so underdogs surface first).
+- `NumberInput.tsx` — Integer input with the same optimistic-update-with-rollback
+  pattern, used for the total-goals / highest-match-goals tournament guesses.
+- `GroupWinnerPicker.tsx` — 12 `TeamSelect`s, one per group (A..L), filtered to that
+  group's teams. Each picks the user's predicted group winner.
 - `TournamentForm.tsx` — Admin form for tournament key dates.
 
 ## Conventions
@@ -46,3 +52,4 @@ server pages.
 
 ## Recent changes
 <!-- Newest first. Keep last 10. One line per entry. -->
+- 2026-05-22: Added `NumberInput.tsx` and `GroupWinnerPicker.tsx` for the new tournament-wide props (total goals, highest match, group winners). `TeamSelect` gained `showRanking` for rank-based dark-horse display. `TournamentForm` extended with first-eliminated, total-goals, highest-match, troublemaker fields plus the rank-aware dark-horse label.

@@ -135,6 +135,17 @@ export async function syncFixtures() {
     if (finalFinished) {
       await supabase.rpc("score_tournament");
     }
+    // Per-group / first-eliminated props are settled progressively as the
+    // group stage unfolds; cheap when there's nothing new.
+    try {
+      await supabase.rpc("settle_group_stage_props");
+    } catch {}
+
+    // Drain per-match detail fetches for FINISHED matches that haven't been
+    // synced yet. Capped per run to stay under the 10 req/min free-tier cap
+    // (syncFixtures itself already burned 1, so 5 leaves a 4-call buffer).
+    const detailsSynced = await drainPendingMatchDetails(supabase, fd, 5);
+
     try {
       await supabase.rpc("refresh_league_standings");
     } catch {}
@@ -143,9 +154,10 @@ export async function syncFixtures() {
       inserted,
       scored,
       finished: finishedIds.length,
+      detailsSynced,
     });
 
-    return { inserted, scored, finished: finishedIds.length };
+    return { inserted, scored, finished: finishedIds.length, detailsSynced };
   } catch (e) {
     const err = e instanceof Error ? e.message : String(e);
     await log(supabase, "/matches", `Failed: ${err}`);
@@ -167,6 +179,101 @@ export async function syncScorers() {
     await log(supabase, "/scorers", `Failed: ${err}`);
     throw e;
   }
+}
+
+// Fetches per-match bookings and goals for up to `limit` FINISHED matches
+// where details_synced_at IS NULL, then writes player_card_log /
+// player_goal_log rows and marks the match as synced. Returns the number of
+// matches successfully drained. Errors on individual matches are logged but
+// don't abort the run.
+async function drainPendingMatchDetails(
+  supabase: ReturnType<typeof supabaseService>,
+  fd: FootballDataClient,
+  limit: number,
+): Promise<number> {
+  const { data: pending } = await supabase
+    .from("matches")
+    .select("id, external_id")
+    .eq("status", "FINISHED")
+    .is("details_synced_at", null)
+    .order("finished_at", { ascending: true })
+    .limit(limit);
+
+  if (!pending || pending.length === 0) return 0;
+
+  const { data: allPlayers } = await supabase.from("players").select("id, external_id");
+  const playerByExternal = new Map<number, string>();
+  for (const p of allPlayers ?? []) {
+    if (p.external_id != null) playerByExternal.set(p.external_id, p.id);
+  }
+
+  let synced = 0;
+  for (const row of pending) {
+    if (row.external_id == null) continue;
+    try {
+      const match = await fd.match(row.external_id);
+      const goals = match.goals ?? [];
+      const bookings = match.bookings ?? [];
+
+      if (goals.length > 0) {
+        const goalRows = goals
+          .map((g) => {
+            const pid = playerByExternal.get(g.scorer.id);
+            if (!pid) return null;
+            return { player_id: pid, match_id: row.id, minute: g.minute };
+          })
+          .filter((r): r is { player_id: string; match_id: string; minute: number | null } => r != null);
+        if (goalRows.length > 0) {
+          await supabase.from("player_goal_log").upsert(goalRows, {
+            onConflict: "player_id,match_id,minute",
+          });
+        }
+      }
+
+      if (bookings.length > 0) {
+        type CardRow = {
+          player_id: string;
+          match_id: string;
+          minute: number | null;
+          card_type: "YELLOW" | "RED" | "YELLOW_RED";
+        };
+        const cardRows: CardRow[] = [];
+        for (const b of bookings) {
+          const pid = playerByExternal.get(b.player.id);
+          if (!pid) continue;
+          cardRows.push({
+            player_id: pid,
+            match_id: row.id,
+            minute: b.minute,
+            card_type: b.card,
+          });
+        }
+        if (cardRows.length > 0) {
+          await supabase.from("player_card_log").upsert(cardRows, {
+            onConflict: "player_id,match_id,minute,card_type",
+          });
+        }
+      }
+
+      if (match.bookings === undefined) {
+        await log(
+          supabase,
+          `/matches/${row.external_id}`,
+          "No bookings field in match payload — troublemaker prop will score nobody if every payload behaves this way (free-tier limitation?).",
+        );
+      }
+
+      await supabase
+        .from("matches")
+        .update({ details_synced_at: new Date().toISOString() })
+        .eq("id", row.id);
+      synced++;
+    } catch (e) {
+      const err = e instanceof Error ? e.message : String(e);
+      await log(supabase, `/matches/${row.external_id}`, `Detail sync failed: ${err}`);
+    }
+  }
+  return synced;
 }
 
 // Assign bracket_slot deterministically per knockout stage by kickoff order.

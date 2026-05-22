@@ -14,7 +14,13 @@ export const POINTS = {
     winner: 25,
     runnerUp: 10,
     topScorer: 15,
-    darkHorse: 10,
+    // Dark horse is rank-based: scores teams.fifa_ranking (1..48) if the
+    // picked team reaches QF. See lib/scoring/fifa-rankings.ts.
+    totalGoalsBase: 20,
+    highestMatchBase: 15,
+    troublemaker: 15,
+    groupWinner: 5,
+    firstEliminated: 10,
   },
   playerProp: 10,
 } as const;
