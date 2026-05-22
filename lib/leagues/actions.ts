@@ -58,16 +58,42 @@ export async function createLeague(_prev: CreateLeagueState, formData: FormData)
   // Sanity check: confirm the creator can see their own league via RLS. If
   // not, the destination page would 404 — surface that here instead so the
   // user gets a real error in the form rather than a confusing 404.
-  const { data: visible } = await supabase
+  const { data: visible, error: visibleError } = await supabase
     .from("leagues")
     .select("id")
     .eq("id", created.id)
     .maybeSingle();
   if (!visible) {
+    // Pull richer context so we can finally diagnose this on prod:
+    // - the auth.uid() PostgREST sees for the caller's JWT
+    // - whether the user can read their profile (proves role=authenticated)
+    // - whether the user can read their own league_members row (proves the
+    //   league_members RLS policy resolves correctly for them)
+    const [uidRes, profileRes, memberRes] = await Promise.all([
+      supabase.rpc("debug_auth_uid"),
+      supabase.from("profiles").select("id").eq("id", user.id).maybeSingle(),
+      supabase
+        .from("league_members")
+        .select("user_id, league_id")
+        .eq("league_id", created.id)
+        .eq("user_id", user.id)
+        .maybeSingle(),
+    ]);
     Sentry.captureMessage("createLeague: new league not visible to creator via RLS", {
       level: "error",
       tags: { server_action: "createLeague" },
-      extra: { user_id: user.id, league_id: created.id, slug: created.slug },
+      extra: {
+        user_id: user.id,
+        league_id: created.id,
+        slug: created.slug,
+        visible_error: visibleError?.message ?? null,
+        rls_auth_uid: uidRes.data ?? null,
+        rls_auth_uid_error: uidRes.error?.message ?? null,
+        profile_readable: !!profileRes.data,
+        profile_error: profileRes.error?.message ?? null,
+        member_row_readable: !!memberRes.data,
+        member_error: memberRes.error?.message ?? null,
+      },
     });
     await service.from("league_members").delete().eq("league_id", created.id);
     await service.from("leagues").delete().eq("id", created.id);

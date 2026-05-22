@@ -48,6 +48,7 @@ schedule that polls football-data.org.
 
 ## Recent changes
 <!-- Newest first. Keep last 10. One line per entry. -->
+- 2026-05-22: `0007_leagues_owner_base_case.sql` — 0006 wasn't enough; users still hit "League created but not visible to you" on prod. Adds an `owner_id = auth.uid()` base case to `leagues_read_members` so a creator can read their league back regardless of how the `league_members` EXISTS subquery resolves. Also adds a `debug_auth_uid()` SQL function used by the createLeague action to capture the PostgREST-side `auth.uid()` into Sentry when the visibility check still fails.
 - 2026-05-22: `0006_fix_league_members_rls.sql` — adds a `user_id = auth.uid()` bootstrap clause to `league_members_read_self_leagues` so the policy isn't fully self-referential. Without it, the EXISTS subquery hit Postgres' RLS recursion-breaker on freshly-created leagues, hiding the creator's own membership row and (via the `leagues_read_members` EXISTS check) the league itself — the root cause of the post-create 404.
 - 2026-05-22: `0005_more_tournament_props.sql` — five new tournament-wide props (total goals, highest-match goals, troublemaker, group winners ×12, first eliminated); rewrites dark-horse scoring as rank-based (`teams.fifa_ranking`); adds `matches.details_synced_at` marker; extends `score_tournament` to chain into the new scorers.
 - 2026-05-19: `0004_score_fixes.sql` — accumulate row counts across all INSERTs in `score_bracket`/`score_tournament`; add `redeem_league_invite(token, user_id)` for atomic invite consumption.
