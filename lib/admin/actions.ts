@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { seedTeams, syncFixtures, syncScorers } from "@/lib/football-data/sync";
 import { FootballDataClient } from "@/lib/football-data/client";
+import { captureServerActionError } from "@/lib/sentry/capture";
 
 async function assertAdmin() {
   const supabase = await supabaseServer();
@@ -27,7 +28,7 @@ export async function runSeedTeams() {
     revalidatePath("/admin");
     return { ok: true, ...result } as const;
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) } as const;
+    return { ok: false, error: captureServerActionError(e, "runSeedTeams") } as const;
   }
 }
 
@@ -38,7 +39,7 @@ export async function runSyncFixtures() {
     revalidatePath("/admin");
     return { ok: true, ...result } as const;
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) } as const;
+    return { ok: false, error: captureServerActionError(e, "runSyncFixtures") } as const;
   }
 }
 
@@ -49,7 +50,7 @@ export async function runSyncScorers() {
     revalidatePath("/admin");
     return { ok: true, ...result } as const;
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) } as const;
+    return { ok: false, error: captureServerActionError(e, "runSyncScorers") } as const;
   }
 }
 
@@ -63,7 +64,7 @@ export async function runCheckToken() {
       sample: teams[0]?.name ?? null,
     } as const;
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) } as const;
+    return { ok: false, error: captureServerActionError(e, "runCheckToken") } as const;
   }
 }
 

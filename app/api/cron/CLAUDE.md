@@ -43,3 +43,4 @@ admin UI for ad-hoc syncs.
 
 ## Recent changes
 <!-- Newest first. Keep last 10. One line per entry. -->
+- 2026-05-22: Both `sync-fixtures` and `sync-scorers` catch blocks now call `Sentry.captureException(e, { tags: { cron: "..." } })` before returning the JSON error. No-op when `NEXT_PUBLIC_SENTRY_DSN` is unset.

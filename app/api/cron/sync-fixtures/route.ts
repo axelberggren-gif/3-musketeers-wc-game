@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { syncFixtures } from "@/lib/football-data/sync";
 
 export const runtime = "nodejs";
@@ -10,6 +11,7 @@ export async function POST(request: NextRequest) {
     const result = await syncFixtures();
     return NextResponse.json({ ok: true, ...result });
   } catch (e) {
+    Sentry.captureException(e, { tags: { cron: "sync-fixtures" } });
     const err = e instanceof Error ? e.message : String(e);
     return NextResponse.json({ ok: false, error: err }, { status: 500 });
   }

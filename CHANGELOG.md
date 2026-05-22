@@ -34,6 +34,7 @@ After committing your change, run `git commit --amend --no-edit` once to backfil
 ### Removed
 
 ### Infra
+- 2026-05-22 (`pending`) Sentry integration for error tracking + errors-only session replay. Adds `@sentry/nextjs`, root-level `instrumentation-client.ts` / `instrumentation.ts` / `sentry.server.config.ts` / `sentry.edge.config.ts`, `app/global-error.tsx`, `lib/sentry/capture.ts`. `next.config.ts` wrapped in `withSentryConfig` (source-map upload skipped when `SENTRY_AUTH_TOKEN` unset). Admin server actions + cron routes tag exceptions on capture. `Sentry.setUser({ id, username })` from `(app)/layout.tsx` (never email). Integration no-ops without `NEXT_PUBLIC_SENTRY_DSN`. `.env.example` added — @ax
 - 2026-05-20 (`pending`) GitHub Issues tracker scaffolded: issue forms (Task/Bug/Idea), `.github/labels.yml` + `sync-labels` workflow, PR template gets a `Closes #N` slot, AGENTS.md documents the kanban workflow — @ax
 - 2026-05-20 (`pending`) Agent-native tooling pass: `verifier` subagent, husky pre-commit (lint+typecheck), canon/non-canon banners on every `CLAUDE.md` and `CHANGELOG`, `/.claude-identity.example` template, GitHub Issues codified as the tracker — @ax
 - 2026-05-19 (`pending`) Migration 0004: row-count fixes for `score_bracket`/`score_tournament` plus `redeem_league_invite` RPC — @?
