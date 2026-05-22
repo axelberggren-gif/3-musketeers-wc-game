@@ -115,24 +115,47 @@ export default async function Round1Page() {
     return acc;
   }, {});
 
+  // Tally pick coverage per group letter so we can flag complete groups with ✓.
+  const groupCoverage = new Map<string, { picked: number; total: number }>();
+  for (const m of matches) {
+    if (!m.group_letter) continue;
+    const stats = groupCoverage.get(m.group_letter) ?? { picked: 0, total: 0 };
+    stats.total += 1;
+    if (picksByMatch.has(m.id)) stats.picked += 1;
+    groupCoverage.set(m.group_letter, stats);
+  }
+  const groupLetters = Array.from(groupCoverage.keys()).sort();
+  const totalPicked = picksByMatch.size;
+  const totalToGo = matches.length - totalPicked;
+
   return (
-    <main className="max-w-4xl mx-auto px-4 py-8 flex flex-col gap-6">
-      <header className="flex flex-col gap-2">
-        <span className="badge w-fit">Round 1 · Pre-tournament</span>
-        <h1 className="text-3xl font-bold">Group stage + tournament picks</h1>
-        <p className="text-sm text-[var(--muted)]">
-          Pick 1X2 for every group match plus tournament-wide bets: winner, runner-up, golden
-          boot, dark horse, total goals, group winners, troublemaker, first team out and more.
-          All picks autosave and can be changed any time before first kickoff.
+    <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-10 flex flex-col gap-6">
+      <header className="flex flex-col gap-3">
+        <span
+          className="badge badge-coral self-start -rotate-2"
+          style={{ boxShadow: "3px 3px 0 var(--ink)" }}
+        >
+          Round 1 · Group stage
+        </span>
+        <h1 className="font-display uppercase text-4xl sm:text-5xl leading-none tracking-tight">
+          Stick your <span className="text-coral">picks</span>
+        </h1>
+        <p className="text-sm text-ink-soft">
+          Tap a flag to commit. Picks autosave and can be changed any time before first kickoff.
         </p>
       </header>
 
       {tournament && (
-        <CountdownBanner target={tournament.first_kickoff_at} label="Round 1 locks at first kickoff" />
+        <CountdownBanner
+          target={tournament.first_kickoff_at}
+          label="Round 1 locks in"
+        />
       )}
 
       <section className="card flex flex-col gap-4">
-        <h2 className="font-semibold">Tournament outcomes &amp; player props</h2>
+        <h2 className="font-display uppercase tracking-wide text-lg">
+          Tournament outcomes & player props
+        </h2>
         <TournamentForm
           teams={teams}
           players={players}
@@ -158,8 +181,10 @@ export default async function Round1Page() {
       </section>
 
       <section className="card flex flex-col gap-4">
-        <h2 className="font-semibold">Group winners (5 pts each)</h2>
-        <p className="text-sm text-[var(--muted)]">
+        <h2 className="font-display uppercase tracking-wide text-lg">
+          Group winners (5 pts each)
+        </h2>
+        <p className="text-sm text-ink-soft">
           Pick the team you think finishes 1st in each of the 12 groups.
         </p>
         <GroupWinnerPicker
@@ -170,25 +195,53 @@ export default async function Round1Page() {
       </section>
 
       <section className="flex flex-col gap-4">
-        <div className="flex items-baseline justify-between">
-          <h2 className="font-semibold">Group stage — 1X2</h2>
-          <span className="text-sm text-[var(--muted)]">{matches.length} matches</span>
+        <div className="flex items-baseline justify-between gap-3 flex-wrap">
+          <h2 className="font-display uppercase tracking-wide text-lg">Group stage — 1X2</h2>
+          <span className="font-mono-sticker text-xs text-ink-soft">
+            <b className="text-pitch">{totalPicked}</b> picked ·{" "}
+            <b className="text-coral">{totalToGo}</b> to go
+          </span>
         </div>
+        {groupLetters.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {groupLetters.map((g) => {
+              const stats = groupCoverage.get(g)!;
+              const complete = stats.picked === stats.total && stats.total > 0;
+              return (
+                <span
+                  key={g}
+                  className={[
+                    "inline-flex items-center gap-1.5 rounded-full border-2 border-ink font-display uppercase text-[11px] tracking-wider px-3 py-1",
+                    complete ? "bg-pitch text-white" : "bg-white text-ink",
+                  ].join(" ")}
+                  style={{ boxShadow: complete ? "3px 3px 0 var(--ink)" : "3px 3px 0 var(--ink)" }}
+                >
+                  Group {g}
+                  {complete ? <span aria-label="complete">✓</span> : (
+                    <span className="font-mono-sticker text-[10px] text-ink-soft normal-case">
+                      {stats.picked}/{stats.total}
+                    </span>
+                  )}
+                </span>
+              );
+            })}
+          </div>
+        )}
         {matches.length === 0 && (
-          <div className="flex flex-col gap-1 text-sm text-[var(--muted)]">
+          <div className="card flex flex-col gap-1 text-sm text-ink-soft">
             <p>
               Group-stage fixtures haven&rsquo;t been seeded yet. An admin needs to run the
               football-data sync.
             </p>
             {lastSync ? (
-              <p className="font-mono text-xs">
+              <p className="font-mono-sticker text-xs">
                 Last sync attempt {new Date(lastSync.ran_at).toLocaleString()} ·{" "}
                 {lastSync.endpoint}
                 {lastSync.status_code ? ` · HTTP ${lastSync.status_code}` : ""} ·{" "}
                 {lastSync.message ?? "(no message)"}
               </p>
             ) : (
-              <p className="font-mono text-xs">
+              <p className="font-mono-sticker text-xs">
                 No sync has run yet — check FOOTBALL_DATA_TOKEN, CRON_SECRET, and the
                 app.cron_app_url / app.cron_secret Postgres GUCs.
               </p>
@@ -197,7 +250,9 @@ export default async function Round1Page() {
         )}
         {Object.entries(grouped).map(([date, group]) => (
           <div key={date} className="flex flex-col gap-3">
-            <h3 className="text-sm text-[var(--muted)] uppercase tracking-wide">{date}</h3>
+            <h3 className="font-mono-sticker text-[11px] uppercase tracking-widest text-ink-soft font-medium">
+              {date}
+            </h3>
             <div className="grid md:grid-cols-2 gap-3">
               {group.map((m) => (
                 <MatchPickCard

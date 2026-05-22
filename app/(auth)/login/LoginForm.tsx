@@ -33,10 +33,17 @@ export function LoginForm({
 
   if (status === "sent") {
     return (
-      <div className="flex flex-col gap-2">
-        <p className="text-[var(--accent)] font-medium">Check your inbox.</p>
-        <p className="text-sm text-[var(--muted)]">
-          We sent a magic link to <span className="font-mono">{email}</span>. Click it to sign in.
+      <div className="flex flex-col gap-3">
+        <span
+          className="badge badge-pitch self-start"
+          style={{ boxShadow: "3px 3px 0 var(--ink)" }}
+        >
+          ✓ Magic link sent
+        </span>
+        <p className="text-sm text-ink-soft">
+          We sent a link to{" "}
+          <span className="font-mono-sticker text-ink">{email}</span>. Click it from your inbox
+          to finish signing in.
         </p>
       </div>
     );
@@ -57,24 +64,24 @@ export function LoginForm({
         className="input"
         placeholder="you@example.com"
       />
-      {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
-      <button type="submit" disabled={status === "sending"} className="btn btn-primary mt-2">
+      {error && <p className="text-sm text-red font-medium">{error}</p>}
+      <button type="submit" disabled={status === "sending"} className="btn btn-primary mt-1">
         {status === "sending"
           ? devInstant
             ? "Signing in…"
             : "Sending…"
           : devInstant
-            ? "Sign in (dev — no email)"
+            ? "Sign in (dev)"
             : "Send magic link"}
       </button>
       {devInstant && (
-        <p className="text-xs text-[var(--accent)] mt-1">
+        <p className="text-xs text-pitch font-medium">
           Dev mode: email must already exist in Supabase. No magic link is sent.
         </p>
       )}
       {!inviteToken && !devInstant && (
-        <p className="text-xs text-[var(--muted)] mt-2">
-          Don&rsquo;t have an account? You&rsquo;ll need an invite link from a league owner.
+        <p className="text-xs text-ink-soft mt-1">
+          Don&rsquo;t have an account? Ask a league owner for an invite link.
         </p>
       )}
     </form>

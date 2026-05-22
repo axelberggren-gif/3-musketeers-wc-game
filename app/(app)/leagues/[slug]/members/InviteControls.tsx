@@ -2,7 +2,6 @@
 
 import { useState, useTransition } from "react";
 import { createInvite, revokeInvite } from "@/lib/leagues/actions";
-import { Copy, Plus, X } from "lucide-react";
 
 interface Invite {
   id: string;
@@ -36,15 +35,15 @@ export function InviteControls({
 
   return (
     <section className="card flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <h2 className="font-semibold">Invite links</h2>
-        <button onClick={handleCreate} disabled={pending} className="btn btn-primary">
-          <Plus className="w-4 h-4" /> {pending ? "Creating…" : "New invite"}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <h2 className="font-display uppercase tracking-wide text-base">Invite links</h2>
+        <button onClick={handleCreate} disabled={pending} className="btn btn-primary btn-sm">
+          + {pending ? "Creating…" : "New invite"}
         </button>
       </div>
-      {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
+      {error && <p className="text-sm text-red font-medium">{error}</p>}
       {invites.length === 0 ? (
-        <p className="text-sm text-[var(--muted)]">No invites yet. Create one to share.</p>
+        <p className="text-sm text-ink-soft">No invites yet. Create one to share.</p>
       ) : (
         <ul className="flex flex-col gap-2">
           {invites.map((invite) => (
@@ -83,31 +82,32 @@ function InviteRow({ invite, leagueSlug }: { invite: Invite; leagueSlug: string 
   return (
     <li
       className={[
-        "flex items-center gap-2 p-3 rounded-lg border",
-        dead ? "border-[var(--border)] opacity-60" : "border-[var(--border)]",
+        "flex items-center gap-2 p-3 rounded-lg border-2 border-ink",
+        dead ? "opacity-60 bg-paper-2" : "bg-paper-2",
       ].join(" ")}
+      style={{ boxShadow: "2px 2px 0 var(--ink)" }}
     >
-      <code className="text-xs font-mono flex-1 truncate">{url}</code>
-      <span className="text-xs text-[var(--muted)] tabular-nums">
+      <code className="text-xs font-mono-sticker flex-1 truncate text-ink">{url}</code>
+      <span className="font-mono-sticker text-[11px] text-ink-soft tabular-nums">
         {invite.uses_count}/{invite.max_uses ?? "∞"}
       </span>
       {!dead && (
-        <button onClick={handleCopy} className="btn btn-ghost px-2">
-          <Copy className="w-3.5 h-3.5" /> {copied ? "Copied" : "Copy"}
+        <button onClick={handleCopy} className="btn btn-ghost btn-sm">
+          {copied ? "Copied" : "Copy"}
         </button>
       )}
       {!dead && (
         <button
           onClick={handleRevoke}
           disabled={pending}
-          className="btn btn-ghost px-2 text-[var(--danger)]"
+          className="btn btn-ghost btn-sm text-red"
         >
-          <X className="w-3.5 h-3.5" /> Revoke
+          Revoke
         </button>
       )}
-      {invite.revoked && <span className="badge">Revoked</span>}
-      {expired && <span className="badge">Expired</span>}
-      {exhausted && <span className="badge">Used up</span>}
+      {invite.revoked && <span className="badge !text-[10px]">Revoked</span>}
+      {expired && <span className="badge !text-[10px]">Expired</span>}
+      {exhausted && <span className="badge !text-[10px]">Used up</span>}
     </li>
   );
 }

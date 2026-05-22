@@ -48,3 +48,4 @@ cron triggers).
 
 ## Recent changes
 <!-- Newest first. Keep last 10. One line per entry. -->
+- 2026-05-22: Sticker Stadium visual identity rolled out. `globals.css` swapped dark-theme tokens for cream paper + ink palette (`--paper`, `--ink`, `--pitch`, `--gold`, `--coral`, …) and added sticker primitives (`.sticker`, `.holo`, `.badge-*`, etc.). `layout.tsx` now loads Archivo Black / Inter / DM Mono. Every user-facing route (`/`, `/login`, `/join/[token]`, `/leagues`, `/leagues/[slug]/*`, `/predict`, `/predict/bracket`, `/match/[id]`, `/profile/[username]`) redesigned. `/predict` got a group chip strip that flips pitch-green ✓ when all matches in that group have picks. Misalignments tracked in `/DESIGN_MISALIGNMENTS.md`.

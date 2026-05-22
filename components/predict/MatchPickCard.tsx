@@ -5,7 +5,6 @@ import { setMatchPick } from "@/lib/predictions/actions";
 import type { Pick1X2 } from "@/lib/supabase/types";
 import { CountryFlag } from "@/components/CountryFlag";
 import { isoToLocal } from "@/lib/utils";
-import { Handshake, Check } from "lucide-react";
 
 interface Team {
   id: string;
@@ -37,10 +36,11 @@ export function MatchPickCard({ match, initialPick, locked }: Props) {
   function choose(value: Pick1X2) {
     if (locked || pending) return;
     const previous = pick;
-    setPick(value);
+    const next = pick === value ? null : value;
+    setPick(next);
     setError(null);
     startTransition(async () => {
-      const result = await setMatchPick(match.id, value);
+      const result = await setMatchPick(match.id, next ?? value);
       if (!result.ok) {
         setPick(previous);
         setError(result.error);
@@ -49,61 +49,62 @@ export function MatchPickCard({ match, initialPick, locked }: Props) {
   }
 
   return (
-    <div className="card flex flex-col gap-3">
-      <div className="flex items-center justify-between text-xs text-[var(--muted)]">
-        <span>
-          {match.group_letter ? `Group ${match.group_letter} · ` : ""}
+    <div className="card !p-4 flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="badge !text-[10px]">
+          {match.group_letter ? `Group ${match.group_letter}` : "Group"}
+        </span>
+        <span className="font-mono-sticker text-[11px] text-ink-soft uppercase tracking-wider">
           {isoToLocal(match.kickoff_at)}
         </span>
-        {locked && <span className="badge">Locked</span>}
-        {!locked && pick && (
-          <span className="badge text-[var(--accent)]">
-            <Check className="w-3 h-3" /> Saved
-          </span>
+        {locked ? (
+          <span className="badge badge-ink">Locked</span>
+        ) : pick ? (
+          <span className="badge badge-pitch">✓ Picked</span>
+        ) : (
+          <span className="badge badge-coral">Pick!</span>
         )}
       </div>
-      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+      <div className="grid grid-cols-[1fr_64px_1fr] sm:grid-cols-[1fr_80px_1fr] gap-2 items-stretch">
         <PickTile
           selected={pick === "HOME"}
           disabled={locked}
-          label={match.home?.short_name ?? match.home?.name ?? "Home"}
+          label={match.home?.short_name ?? match.home?.code ?? match.home?.name ?? "Home"}
           flag={
             match.home ? (
               <CountryFlag
                 crestUrl={match.home.crest_url}
                 code={match.home.code}
                 name={match.home.name}
-                size={56}
+                size={48}
               />
             ) : null
           }
           onClick={() => choose("HOME")}
         />
-        <PickTile
+        <DrawTile
           selected={pick === "DRAW"}
           disabled={locked}
-          label="Draw"
-          flag={<Handshake className="w-7 h-7 text-[var(--muted)]" />}
           onClick={() => choose("DRAW")}
         />
         <PickTile
           selected={pick === "AWAY"}
           disabled={locked}
-          label={match.away?.short_name ?? match.away?.name ?? "Away"}
+          label={match.away?.short_name ?? match.away?.code ?? match.away?.name ?? "Away"}
           flag={
             match.away ? (
               <CountryFlag
                 crestUrl={match.away.crest_url}
                 code={match.away.code}
                 name={match.away.name}
-                size={56}
+                size={48}
               />
             ) : null
           }
           onClick={() => choose("AWAY")}
         />
       </div>
-      {error && <p className="text-xs text-[var(--danger)]">{error}</p>}
+      {error && <p className="text-xs text-red font-medium">{error}</p>}
     </div>
   );
 }
@@ -127,16 +128,49 @@ function PickTile({
       onClick={onClick}
       disabled={disabled}
       className={[
-        "flex flex-col items-center justify-center gap-2 py-4 px-2 rounded-xl border transition-all",
-        "min-h-[110px] text-center",
-        selected
-          ? "bg-[color:var(--accent)]/15 border-[var(--accent)] text-[var(--foreground)]"
-          : "bg-[var(--surface-2)] border-[var(--border)] hover:border-[var(--accent)]/60",
-        disabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer active:scale-[0.98]",
+        "rounded-xl border-2 border-ink flex flex-col items-center justify-center gap-1.5 py-3 px-1.5 text-center",
+        "min-h-[96px] font-display uppercase tracking-wider text-xs",
+        "transition-transform",
+        selected ? "bg-gold text-ink" : "bg-paper-2 text-ink",
+        disabled
+          ? "opacity-60 cursor-not-allowed"
+          : "cursor-pointer hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0 active:translate-y-0",
       ].join(" ")}
+      style={{
+        boxShadow: selected ? "3px 3px 0 var(--ink)" : "3px 3px 0 var(--ink)",
+      }}
     >
       <div className="flex items-center justify-center">{flag}</div>
-      <span className="text-sm font-medium leading-tight">{label}</span>
+      <span className="leading-tight">{label}</span>
+    </button>
+  );
+}
+
+function DrawTile({
+  selected,
+  disabled,
+  onClick,
+}: {
+  selected: boolean;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={[
+        "rounded-full border-2 border-ink flex items-center justify-center text-center font-display uppercase tracking-wider text-[11px]",
+        "self-center mx-auto w-14 h-14 sm:w-16 sm:h-16",
+        selected ? "bg-gold text-ink" : "bg-white text-ink-soft",
+        disabled
+          ? "opacity-60 cursor-not-allowed"
+          : "cursor-pointer hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0 active:translate-y-0",
+      ].join(" ")}
+      style={{ boxShadow: "3px 3px 0 var(--ink)" }}
+    >
+      Draw
     </button>
   );
 }

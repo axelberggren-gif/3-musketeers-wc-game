@@ -12,7 +12,7 @@ export function SignOutButton() {
     router.push("/");
   }
   return (
-    <button onClick={handleSignOut} className="btn btn-ghost text-sm">
+    <button onClick={handleSignOut} className="btn btn-ghost btn-sm">
       Sign out
     </button>
   );
