@@ -60,6 +60,7 @@ export interface Team {
   code: string;
   crest_url: string | null;
   group_letter: string | null;
+  fifa_ranking: number | null;
 }
 
 export interface Player {
@@ -84,6 +85,7 @@ export interface Match {
   away_score: number | null;
   winner: Winner;
   finished_at: string | null;
+  details_synced_at: string | null;
 }
 
 export interface MatchPrediction {
@@ -108,7 +110,41 @@ export interface TournamentPrediction {
   runner_up_team_id: string | null;
   top_scorer_player_id: string | null;
   dark_horse_team_id: string | null;
+  total_goals_guess: number | null;
+  highest_match_goals_guess: number | null;
+  first_eliminated_team_id: string | null;
   submitted_at: string;
+}
+
+export interface GroupWinnerPrediction {
+  id: string;
+  user_id: string;
+  group_letter: string;
+  team_id: string;
+  submitted_at: string;
+}
+
+export type CardType = "YELLOW" | "RED" | "YELLOW_RED";
+
+export interface PlayerCardLog {
+  id: string;
+  player_id: string;
+  match_id: string;
+  minute: number | null;
+  card_type: CardType;
+  recorded_at: string;
+}
+
+export interface GroupSettlement {
+  group_letter: string;
+  winner_team_id: string | null;
+  settled_at: string;
+}
+
+export interface FirstElimination {
+  id: number;
+  team_id: string | null;
+  detected_at: string | null;
 }
 
 export interface PlayerPropPrediction {

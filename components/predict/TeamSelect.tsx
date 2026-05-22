@@ -6,6 +6,7 @@ export interface TeamOption {
   id: string;
   name: string;
   code: string;
+  fifa_ranking?: number | null;
 }
 
 interface Props {
@@ -14,9 +15,10 @@ interface Props {
   initial: string | null;
   disabled: boolean;
   onSave: (teamId: string | null) => Promise<{ ok: boolean; error?: string }>;
+  showRanking?: boolean;
 }
 
-export function TeamSelect({ label, options, initial, disabled, onSave }: Props) {
+export function TeamSelect({ label, options, initial, disabled, onSave, showRanking }: Props) {
   const [value, setValue] = useState<string | null>(initial);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -45,9 +47,17 @@ export function TeamSelect({ label, options, initial, disabled, onSave }: Props)
         className="input"
       >
         <option value="">— pick a team —</option>
-        {options.map((t) => (
+        {(showRanking
+          ? [...options].sort((a, b) => {
+              const ra = a.fifa_ranking ?? Number.POSITIVE_INFINITY;
+              const rb = b.fifa_ranking ?? Number.POSITIVE_INFINITY;
+              if (ra !== rb) return rb - ra;
+              return a.name.localeCompare(b.name);
+            })
+          : options
+        ).map((t) => (
           <option key={t.id} value={t.id}>
-            {t.name}
+            {showRanking && t.fifa_ranking != null ? `#${t.fifa_ranking} — ${t.name}` : t.name}
           </option>
         ))}
       </select>

@@ -3,6 +3,8 @@ import { computeLockState } from "@/lib/scoring/lock";
 import { unwrapRelation } from "@/lib/utils";
 import { MatchPickCard, type MatchPickRow } from "@/components/predict/MatchPickCard";
 import { TournamentForm } from "@/components/predict/TournamentForm";
+import { GroupWinnerPicker } from "@/components/predict/GroupWinnerPicker";
+import type { TeamOption } from "@/components/predict/TeamSelect";
 import { CountdownBanner } from "@/components/predict/CountdownBanner";
 import type { Pick1X2 } from "@/lib/supabase/types";
 
@@ -16,37 +18,50 @@ export default async function Round1Page() {
   if (!user) return null;
 
   const service = supabaseService();
-  const [tournamentRes, matchesRes, picksRes, tpRes, propsRes, teamsRes, playersRes, lastSyncRes] =
-    await Promise.all([
-      supabase.from("tournament").select("*").single(),
-      supabase
-        .from("matches")
-        .select(
-          "id, kickoff_at, group_letter, stage, home:home_team_id(id, name, short_name, code, crest_url), away:away_team_id(id, name, short_name, code, crest_url)",
-        )
-        .eq("stage", "GROUP")
-        .order("kickoff_at", { ascending: true }),
-      supabase.from("match_predictions").select("match_id, pick").eq("user_id", user.id),
-      supabase
-        .from("tournament_predictions")
-        .select("*")
-        .eq("user_id", user.id)
-        .maybeSingle(),
-      supabase.from("player_prop_predictions").select("prop_key, player_id").eq("user_id", user.id),
-      supabase.from("teams").select("id, name, code").order("name"),
-      supabase
-        .from("players")
-        .select("id, name, team:team_id(name)")
-        .order("name")
-        .limit(1000),
-      service
-        .from("external_sync_log")
-        .select("ran_at, endpoint, status_code, message")
-        .eq("source", "football-data.org")
-        .order("ran_at", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-    ]);
+  const [
+    tournamentRes,
+    matchesRes,
+    picksRes,
+    tpRes,
+    propsRes,
+    teamsRes,
+    playersRes,
+    groupPicksRes,
+    lastSyncRes,
+  ] = await Promise.all([
+    supabase.from("tournament").select("*").single(),
+    supabase
+      .from("matches")
+      .select(
+        "id, kickoff_at, group_letter, stage, home:home_team_id(id, name, short_name, code, crest_url), away:away_team_id(id, name, short_name, code, crest_url)",
+      )
+      .eq("stage", "GROUP")
+      .order("kickoff_at", { ascending: true }),
+    supabase.from("match_predictions").select("match_id, pick").eq("user_id", user.id),
+    supabase
+      .from("tournament_predictions")
+      .select("*")
+      .eq("user_id", user.id)
+      .maybeSingle(),
+    supabase.from("player_prop_predictions").select("prop_key, player_id").eq("user_id", user.id),
+    supabase.from("teams").select("id, name, code, group_letter, fifa_ranking").order("name"),
+    supabase
+      .from("players")
+      .select("id, name, team:team_id(name)")
+      .order("name")
+      .limit(1000),
+    supabase
+      .from("group_winner_predictions")
+      .select("group_letter, team_id")
+      .eq("user_id", user.id),
+    service
+      .from("external_sync_log")
+      .select("ran_at, endpoint, status_code, message")
+      .eq("source", "football-data.org")
+      .order("ran_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
   const tournament = tournamentRes.data;
   const locks = computeLockState(tournament);
@@ -64,7 +79,26 @@ export default async function Round1Page() {
     (propsRes.data ?? []).map((r) => [r.prop_key as string, r.player_id as string]),
   ) as Record<string, string | null>;
 
-  const teams = (teamsRes.data ?? []).map((t) => ({ id: t.id, name: t.name, code: t.code }));
+  const teams: TeamOption[] = (teamsRes.data ?? []).map((t) => ({
+    id: t.id,
+    name: t.name,
+    code: t.code,
+    fifa_ranking: (t as { fifa_ranking?: number | null }).fifa_ranking ?? null,
+  }));
+  const teamsByGroup: Record<string, TeamOption[]> = {};
+  for (const t of teamsRes.data ?? []) {
+    const letter = (t as { group_letter?: string | null }).group_letter ?? null;
+    if (!letter) continue;
+    (teamsByGroup[letter] ??= []).push({
+      id: t.id,
+      name: t.name,
+      code: t.code,
+      fifa_ranking: (t as { fifa_ranking?: number | null }).fifa_ranking ?? null,
+    });
+  }
+  const groupPicks = Object.fromEntries(
+    (groupPicksRes.data ?? []).map((r) => [r.group_letter as string, r.team_id as string]),
+  ) as Record<string, string | null>;
   const players = (playersRes.data ?? []).map((p) => ({
     id: p.id,
     name: p.name,
@@ -87,8 +121,9 @@ export default async function Round1Page() {
         <span className="badge w-fit">Round 1 · Pre-tournament</span>
         <h1 className="text-3xl font-bold">Group stage + tournament picks</h1>
         <p className="text-sm text-[var(--muted)]">
-          Pick 1X2 for every group match, the winner, runner-up, golden boot and dark horse. All
-          picks autosave and can be changed any time before first kickoff.
+          Pick 1X2 for every group match plus tournament-wide bets: winner, runner-up, golden
+          boot, dark horse, total goals, group winners, troublemaker, first team out and more.
+          All picks autosave and can be changed any time before first kickoff.
         </p>
       </header>
 
@@ -106,9 +141,30 @@ export default async function Round1Page() {
             runner_up_team_id: tpRes.data?.runner_up_team_id ?? null,
             top_scorer_player_id: tpRes.data?.top_scorer_player_id ?? null,
             dark_horse_team_id: tpRes.data?.dark_horse_team_id ?? null,
+            first_eliminated_team_id:
+              (tpRes.data as { first_eliminated_team_id?: string | null } | null)
+                ?.first_eliminated_team_id ?? null,
+            total_goals_guess:
+              (tpRes.data as { total_goals_guess?: number | null } | null)?.total_goals_guess ??
+              null,
+            highest_match_goals_guess:
+              (tpRes.data as { highest_match_goals_guess?: number | null } | null)
+                ?.highest_match_goals_guess ?? null,
           }}
           propPicks={propPicks}
           propDefs={PROP_DEFS}
+          locked={locks.round1Locked}
+        />
+      </section>
+
+      <section className="card flex flex-col gap-4">
+        <h2 className="font-semibold">Group winners (5 pts each)</h2>
+        <p className="text-sm text-[var(--muted)]">
+          Pick the team you think finishes 1st in each of the 12 groups.
+        </p>
+        <GroupWinnerPicker
+          teamsByGroup={teamsByGroup}
+          initial={groupPicks}
           locked={locks.round1Locked}
         />
       </section>

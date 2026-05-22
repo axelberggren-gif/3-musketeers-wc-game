@@ -15,6 +15,8 @@ After committing your change, run `git commit --amend --no-edit` once to backfil
 ## [Unreleased]
 
 ### Added
+- 2026-05-22 (`pending`) Five new tournament-wide bets — total goals (closest wins, ties split), highest-scoring match goal count, troublemaker (most card weight), group winners (×12), first team eliminated — plus rank-based dark-horse scoring (points = team's FIFA rank if pick reaches QF). Canonical TS ranks in `lib/scoring/fifa-rankings.ts`, seeded into `teams.fifa_ranking` by migration 0005 — @ax
+- 2026-05-22 (`pending`) `syncFixtures` now drains per-match bookings/goals from `/matches/{id}` (capped at 5/run for rate limit), populating `player_goal_log` and the new `player_card_log` so the troublemaker and golden-boot props have data — @ax
 - 2026-05-19 (`pending`) Vitest unit tests for scoring rules, lock state, and football-data mappers; wired into CI — @?
 - 2026-05-19 (`pending`) `unwrapRelation` helper centralises the PostgREST single-vs-array embedded-relation cast — @?
 

@@ -19,7 +19,13 @@ describe("POINTS constants", () => {
     expect(POINTS.tournament.winner).toBe(25);
     expect(POINTS.tournament.runnerUp).toBe(10);
     expect(POINTS.tournament.topScorer).toBe(15);
-    expect(POINTS.tournament.darkHorse).toBe(10);
+    expect(POINTS.tournament.totalGoalsBase).toBe(20);
+    expect(POINTS.tournament.highestMatchBase).toBe(15);
+    expect(POINTS.tournament.troublemaker).toBe(15);
+    expect(POINTS.tournament.groupWinner).toBe(5);
+    expect(POINTS.tournament.firstEliminated).toBe(10);
+    // Dark horse has no flat value — it scores teams.fifa_ranking (1..48).
+    // See lib/scoring/fifa-rankings.ts + 0005_more_tournament_props.sql.
   });
   it("player prop is 10 pts", () => {
     expect(POINTS.playerProp).toBe(10);
