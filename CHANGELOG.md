@@ -27,6 +27,7 @@ After committing your change, run `git commit --amend --no-edit` once to backfil
 - 2026-05-19 (`pending`) `loadProfileStats` gates accuracy on the viewer being the profile owner — @?
 
 ### Fixed
+- 2026-05-22 (`pending`) League creation hit a 404 right after submit: the `league_members` insert error was ignored (so a silent failure left the user non-member, RLS hid the league, slug page called `notFound()`), and the server-action `redirect()` was unreliable when invoked via `await` inside `startTransition` from a client wrapper. Action now checks the member insert, rolls back the league on failure, and returns `{ ok, slug }` so the client navigates via `router.push()` — @ax
 - 2026-05-19 (`pending`) P0: bracket scoring was a no-op because `matches.bracket_slot` was never populated; sync now derives it deterministically per knockout stage — @?
 - 2026-05-19 (`pending`) `score_bracket` / `score_tournament` returned only the last INSERT's row count; both now accumulate across every insert — @?
 - 2026-05-19 (`pending`) Invite redemption race (concurrent joins could exceed `max_uses`) replaced with atomic `redeem_league_invite` RPC — @?

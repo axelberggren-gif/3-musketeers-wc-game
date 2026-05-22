@@ -1,9 +1,11 @@
 "use client";
 
 import { useTransition, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createLeague } from "@/lib/leagues/actions";
 
 export function CreateLeagueForm() {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -11,7 +13,11 @@ export function CreateLeagueForm() {
     setError(null);
     startTransition(async () => {
       const result = await createLeague(formData);
-      if (result && !result.ok) setError(result.error);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      router.push(`/leagues/${result.slug}`);
     });
   }
 
