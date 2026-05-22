@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { randomToken, unwrapRelation } from "@/lib/utils";
 
@@ -41,14 +40,20 @@ export async function createLeague(formData: FormData) {
     .single();
   if (error || !created) return { ok: false, error: error?.message ?? "Could not create" } as const;
 
-  await service.from("league_members").insert({
+  const { error: memberError } = await service.from("league_members").insert({
     league_id: created.id,
     user_id: user.id,
     role: "owner",
   });
+  if (memberError) {
+    // Roll back the league row so the user can retry — otherwise the slug
+    // is taken and RLS hides the orphan from them, resulting in a 404.
+    await service.from("leagues").delete().eq("id", created.id);
+    return { ok: false, error: memberError.message } as const;
+  }
 
   revalidatePath("/leagues");
-  redirect(`/leagues/${created.slug}`);
+  return { ok: true, slug: created.slug } as const;
 }
 
 export async function createInvite(leagueId: string) {
