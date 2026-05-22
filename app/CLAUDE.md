@@ -9,7 +9,9 @@ cron triggers).
 
 ## Key files
 - `layout.tsx` — Root HTML + font setup. No auth here.
-- `(app)/layout.tsx` — Auth wrapper + Nav for all gated routes.
+- `global-error.tsx` — App Router top-level error boundary; reports to Sentry.
+- `(app)/layout.tsx` — Auth wrapper + Nav for all gated routes. Calls
+  `Sentry.setUser({ id, username })` (never email).
 - `(app)/predict/page.tsx` — Round-1 group-stage 1X2 picks.
 - `(app)/predict/bracket/page.tsx` — Round-2 knockout bracket builder.
 - `(app)/leagues/[slug]/leaderboard/` — Real-time league scoreboard (LeaderboardLive).
@@ -48,4 +50,5 @@ cron triggers).
 
 ## Recent changes
 <!-- Newest first. Keep last 10. One line per entry. -->
+- 2026-05-22: Sentry integration wired (errors + errors-only session replay). New `/instrumentation-client.ts`, `/instrumentation.ts`, `/sentry.server.config.ts`, `/sentry.edge.config.ts`, `app/global-error.tsx`. `(app)/layout.tsx` calls `Sentry.setUser({ id, username })` (never email). Cron routes + admin actions tagged on capture. No-op when `NEXT_PUBLIC_SENTRY_DSN` unset. See `lib/sentry/CLAUDE.md`.
 - 2026-05-22: Sticker Stadium visual identity rolled out. `globals.css` swapped dark-theme tokens for cream paper + ink palette (`--paper`, `--ink`, `--pitch`, `--gold`, `--coral`, …) and added sticker primitives (`.sticker`, `.holo`, `.badge-*`, etc.). `layout.tsx` now loads Archivo Black / Inter / DM Mono. Every user-facing route (`/`, `/login`, `/join/[token]`, `/leagues`, `/leagues/[slug]/*`, `/predict`, `/predict/bracket`, `/match/[id]`, `/profile/[username]`) redesigned. `/predict` got a group chip strip that flips pitch-green ✓ when all matches in that group have picks. Misalignments tracked in `/DESIGN_MISALIGNMENTS.md`.

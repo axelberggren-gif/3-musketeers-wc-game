@@ -147,3 +147,31 @@ merge. For multi-PR work or partial progress, use `Refs: #N` instead.
 - `npm run lint` — ESLint.
 - `npm run typecheck` — `tsc --noEmit`.
 - `npm run db:types` — regenerate `lib/supabase/types.ts` from local Supabase schema.
+
+## Environment variables
+
+See `.env.example` for the full set. Required for runtime: `NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `FOOTBALL_DATA_TOKEN`,
+`CRON_SECRET`. Optional: `NEXT_PUBLIC_SENTRY_DSN` (+ `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`,
+`SENTRY_PROJECT` at build time) — when unset, the Sentry integration no-ops.
+
+## Error tracking (Sentry)
+
+Errors and session replays land in Sentry. The integration is gated on
+`NEXT_PUBLIC_SENTRY_DSN` so local/CI builds without the env vars no-op cleanly.
+
+- Files: `/instrumentation-client.ts`, `/instrumentation.ts`, `/sentry.server.config.ts`,
+  `/sentry.edge.config.ts`, `/app/global-error.tsx`, `/lib/sentry/` — see
+  `lib/sentry/CLAUDE.md`.
+- Server-action `catch` blocks: import `captureServerActionError` from
+  `@/lib/sentry/capture` and call it inside `catch` to surface handled errors.
+- Cron route handlers: call `Sentry.captureException(e, { tags: { cron: "<name>" } })`
+  inside the `catch` block.
+- **Never** call `Sentry.setUser` with `email`. Use `{ id, username }` only.
+- Session replay is **errors-only** + masks all inputs (covers the login email).
+- Agent integration: add the Sentry MCP server to your Claude Code config:
+  ```json
+  { "mcpServers": { "sentry": { "url": "https://mcp.sentry.dev/mcp" } } }
+  ```
+  OAuth triggers on first use. Exposes `find_issues`, `get_issue_details`,
+  `analyze_issue_with_seer`, etc.
