@@ -14,13 +14,19 @@ export default async function JoinPage({
 
   if (!invite) {
     return (
-      <main className="flex-1 flex items-center justify-center px-6 py-20">
+      <main className="flex-1 flex items-center justify-center px-4 py-20">
         <div className="card max-w-md flex flex-col gap-3">
-          <h1 className="text-xl font-bold">Invite invalid</h1>
-          <p className="text-sm text-[var(--muted)]">
+          <span
+            className="badge badge-red self-start"
+            style={{ boxShadow: "3px 3px 0 var(--ink)" }}
+          >
+            ✕ Invite invalid
+          </span>
+          <h1 className="font-display uppercase text-2xl">Link no good</h1>
+          <p className="text-sm text-ink-soft">
             This invite link has expired, been revoked, or doesn&rsquo;t exist.
           </p>
-          <Link href="/" className="btn btn-secondary self-start">
+          <Link href="/" className="btn btn-secondary self-start mt-1">
             Back home
           </Link>
         </div>
@@ -41,19 +47,42 @@ export default async function JoinPage({
   await setPendingInvite(token);
 
   return (
-    <main className="flex-1 flex items-center justify-center px-6 py-20">
-      <div className="card w-full max-w-md flex flex-col gap-6">
-        <div className="flex flex-col gap-1">
-          <span className="badge w-fit">Invite</span>
-          <h1 className="text-2xl font-bold">Join {invite.league_name}</h1>
-          <p className="text-sm text-[var(--muted)]">
-            You&rsquo;ve been invited to a private league. Sign in to join.
-          </p>
+    <main className="flex-1 flex items-center justify-center px-4 py-12 sm:py-20">
+      <div className="w-full max-w-md flex flex-col gap-5">
+        <Link
+          href="/"
+          className="inline-flex items-center gap-1.5 self-center bg-ink text-gold px-3 py-1.5 rounded-lg border-2 border-ink font-display text-base tracking-wider"
+          style={{ boxShadow: "3px 3px 0 var(--coral)" }}
+        >
+          ⚽ KICKOFF<span className="text-pitch-light text-[0.65em]">&apos;26</span>
+        </Link>
+        <div className="card flex flex-col gap-5">
+          <span
+            className="badge badge-coral self-start -rotate-2"
+            style={{ boxShadow: "3px 3px 0 var(--ink)" }}
+          >
+            🎟 You&rsquo;ve been invited
+          </span>
+          <div className="flex flex-col gap-1.5">
+            <h1 className="font-display uppercase text-3xl sm:text-4xl leading-none tracking-tight">
+              Join {invite.league_name}
+            </h1>
+            <p className="text-sm text-ink-soft">
+              You&rsquo;ve been invited to a private league. Sign in to accept and start picking.
+            </p>
+          </div>
+          <div
+            className="rounded-lg border-2 border-ink bg-paper-2 px-3 py-2 font-mono-sticker text-xs flex items-center justify-between gap-2"
+            style={{ boxShadow: "3px 3px 0 var(--ink)" }}
+          >
+            <span className="truncate">kickoff.app/j/{token.slice(0, 12)}</span>
+            <span className="badge badge-gold !py-0 !text-[10px]">Invite</span>
+          </div>
+          <LoginForm
+            inviteToken={token}
+            devInstant={process.env.DEV_INSTANT_LOGIN === "true"}
+          />
         </div>
-        <LoginForm
-          inviteToken={token}
-          devInstant={process.env.DEV_INSTANT_LOGIN === "true"}
-        />
       </div>
     </main>
   );

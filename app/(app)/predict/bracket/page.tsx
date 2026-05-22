@@ -29,20 +29,27 @@ export default async function BracketPage() {
   const slots = buildSlotDefs(teams);
 
   return (
-    <main className="max-w-6xl mx-auto px-4 py-8 flex flex-col gap-6">
-      <header className="flex flex-col gap-2">
-        <span className="badge w-fit">Round 2 · Knockouts</span>
-        <h1 className="text-3xl font-bold">Knockout bracket</h1>
-        <p className="text-sm text-[var(--muted)]">
-          Fill in your bracket from Round of 16 to the Final, plus your overall champion. Locks at
-          the start of R16.
+    <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10 flex flex-col gap-6">
+      <header className="flex flex-col gap-3">
+        <span
+          className="badge badge-coral self-start -rotate-2"
+          style={{ boxShadow: "3px 3px 0 var(--ink)" }}
+        >
+          Round 2 · Knockouts
+        </span>
+        <h1 className="font-display uppercase text-4xl sm:text-5xl leading-none tracking-tight">
+          Knockout <span className="text-coral">bracket</span>
+        </h1>
+        <p className="text-sm text-ink-soft">
+          Fill in your bracket from R16 to the Final, plus your overall champion. Locks at the
+          start of R16.
         </p>
       </header>
 
       {tournament && (
         <CountdownBanner
           target={tournament.knockout_start_at}
-          label="Bracket locks at R16 kickoff"
+          label="Bracket locks in"
         />
       )}
 

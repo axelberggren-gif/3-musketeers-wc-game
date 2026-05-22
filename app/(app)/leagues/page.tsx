@@ -2,7 +2,6 @@ import Link from "next/link";
 import { supabaseServer } from "@/lib/supabase/server";
 import { unwrapRelation } from "@/lib/utils";
 import { CreateLeagueForm } from "./CreateLeagueForm";
-import { Trophy, Users } from "lucide-react";
 
 export default async function LeaguesPage() {
   const supabase = await supabaseServer();
@@ -45,38 +44,55 @@ export default async function LeaguesPage() {
   }
 
   return (
-    <main className="max-w-4xl mx-auto px-4 py-8 flex flex-col gap-6">
-      <header className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold">Your leagues</h1>
-        <p className="text-sm text-[var(--muted)]">
-          Compete in private leagues. Create one and share the invite link.
+    <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-10 flex flex-col gap-6">
+      <header className="flex flex-col gap-3">
+        <span
+          className="badge badge-gold self-start -rotate-2"
+          style={{ boxShadow: "3px 3px 0 var(--ink)" }}
+        >
+          🏟 Your leagues
+        </span>
+        <h1 className="font-display uppercase text-4xl sm:text-5xl leading-none tracking-tight">
+          Pick your <span className="text-coral">crew</span>
+        </h1>
+        <p className="text-sm text-ink-soft">
+          Compete in private leagues. Create one and share the invite link with friends.
         </p>
       </header>
 
       {leagues.length === 0 ? (
-        <p className="card text-sm text-[var(--muted)]">
-          You aren&rsquo;t in any leagues yet. Create one below, or open an invite link from a
-          friend.
-        </p>
+        <div className="card text-sm text-ink-soft flex flex-col gap-1">
+          <p>
+            You aren&rsquo;t in any leagues yet. Create one below, or open an invite link from a
+            friend.
+          </p>
+        </div>
       ) : (
-        <div className="grid sm:grid-cols-2 gap-3">
+        <div className="grid sm:grid-cols-2 gap-4">
           {leagues.map(({ league, role }) => (
             <Link
               key={league.id}
               href={`/leagues/${league.slug}`}
-              className="card flex flex-col gap-2 hover:border-[var(--accent)] transition-colors"
+              className="card flex flex-col gap-2 hover:-translate-x-0.5 hover:-translate-y-0.5 transition-transform"
+              style={{ boxShadow: "4px 4px 0 var(--ink)" }}
             >
-              <div className="flex items-center justify-between">
-                <h2 className="font-semibold flex items-center gap-2">
-                  <Trophy className="w-4 h-4 text-[var(--accent)]" /> {league.name}
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="font-display uppercase text-base tracking-wide flex items-center gap-2">
+                  <span
+                    className="w-7 h-7 rounded-md border-2 border-ink bg-gold flex items-center justify-center text-sm"
+                    aria-hidden
+                  >
+                    🏆
+                  </span>
+                  {league.name}
                 </h2>
-                {role === "owner" && <span className="badge">Owner</span>}
+                {role === "owner" && <span className="badge badge-pitch !text-[10px]">Owner</span>}
               </div>
               {league.description && (
-                <p className="text-sm text-[var(--muted)] line-clamp-2">{league.description}</p>
+                <p className="text-sm text-ink-soft line-clamp-2">{league.description}</p>
               )}
-              <p className="text-xs text-[var(--muted)] flex items-center gap-1">
-                <Users className="w-3 h-3" /> {counts[league.id] ?? 1} member
+              <p className="font-mono-sticker text-[11px] text-ink-soft uppercase tracking-widest">
+                👥 {counts[league.id] ?? 1} player
                 {(counts[league.id] ?? 1) === 1 ? "" : "s"}
               </p>
             </Link>
@@ -85,7 +101,7 @@ export default async function LeaguesPage() {
       )}
 
       <section className="card flex flex-col gap-3">
-        <h2 className="font-semibold">Create a league</h2>
+        <h2 className="font-display uppercase tracking-wide text-lg">Create a league</h2>
         <CreateLeagueForm />
       </section>
     </main>
