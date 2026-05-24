@@ -53,6 +53,7 @@ in `app/api/cron/` and from admin actions.
 
 ## Recent changes
 <!-- Newest first. Keep last 10. One line per entry. -->
+- 2026-05-24: Fixed `group_letter` parser — `m.group` is `"GROUP_A"`..`"GROUP_L"` in v4 (matching the `stage` enum convention), not the legacy `"Group A"` form. The old `replace("Group ", "").slice(0, 1)` was a no-op and returned `"G"` for every group. New `parseGroupLetter()` helper accepts both. `syncFixtures` now calls `backfill_team_group_letters` RPC (migration 0010) after the match upsert loop so `teams.group_letter` (which nothing else wrote) self-heals from match data.
 - 2026-05-22: `syncFixtures` drains up to 5 per-match detail fetches per run into `player_goal_log` / new `player_card_log` (gated on `matches.details_synced_at`); calls `settle_group_stage_props` RPC for progressive group-winner / first-eliminated scoring. `FdBooking` interface + `FdMatch.bookings?` added.
 - 2026-05-19: `syncFixtures` prefetches teams (one query instead of ~128), derives `bracket_slot` deterministically per knockout stage, and invokes `score_tournament` when the Final lands.
 - 2026-05-19: `seedTeams` collapses the two-pass player upsert into a single call with `team_id` populated.

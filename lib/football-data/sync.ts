@@ -10,6 +10,14 @@ import {
 
 const SOURCE = "football-data.org";
 
+// football-data v4 returns `group` as "GROUP_A".."GROUP_L" (matching the
+// uppercase/underscore convention of the `stage` enum). Older docs / v2 used
+// "Group A".."Group L". Accept both; reject anything that doesn't end in A-L.
+function parseGroupLetter(g: string | null): string | null {
+  const m = g?.match(/([A-L])$/i);
+  return m ? m[1].toUpperCase() : null;
+}
+
 async function log(
   supabase: ReturnType<typeof supabaseService>,
   endpoint: string,
@@ -99,7 +107,7 @@ export async function syncFixtures() {
       const payload = {
         external_id: m.id,
         stage: localStage,
-        group_letter: m.group ? m.group.replace("Group ", "").slice(0, 1) : null,
+        group_letter: parseGroupLetter(m.group),
         bracket_slot: bracketSlot,
         kickoff_at: m.utcDate,
         home_team_id: homeUuid,
@@ -135,6 +143,11 @@ export async function syncFixtures() {
     if (finalFinished) {
       await supabase.rpc("score_tournament");
     }
+    // Propagate group_letter from matches to teams (nothing else writes it).
+    try {
+      await supabase.rpc("backfill_team_group_letters");
+    } catch {}
+
     // Per-group / first-eliminated props are settled progressively as the
     // group stage unfolds; cheap when there's nothing new.
     try {
