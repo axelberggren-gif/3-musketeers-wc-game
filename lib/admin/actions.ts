@@ -57,6 +57,8 @@ export async function runSyncScorers() {
 export async function runCheckToken() {
   await assertAdmin();
   try {
+    // TEMP smoke test for Sentry — remove after verifying capture works.
+    throw new Error("sentry-smoke-test");
     const { teams } = await new FootballDataClient().teams();
     return {
       ok: true,
