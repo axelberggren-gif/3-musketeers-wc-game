@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import * as Sentry from "@sentry/nextjs";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { seedTeams, syncFixtures, syncScorers } from "@/lib/football-data/sync";
 import { FootballDataClient } from "@/lib/football-data/client";
@@ -56,9 +57,14 @@ export async function runSyncScorers() {
 
 export async function runCheckToken() {
   await assertAdmin();
+  // TEMP Sentry diagnostic — remove once capture is verified.
+  const dsnSeen = Boolean(process.env.NEXT_PUBLIC_SENTRY_DSN);
+  const clientReady = Boolean(Sentry.getClient());
+  const runtime = process.env.NEXT_RUNTIME ?? "unknown";
+  const vercelEnv = process.env.VERCEL_ENV ?? "local";
+  const diag = `dsn=${dsnSeen} client=${clientReady} runtime=${runtime} env=${vercelEnv}`;
   try {
-    // TEMP smoke test for Sentry — remove after verifying capture works.
-    throw new Error("sentry-smoke-test");
+    throw new Error(`sentry-smoke-test [${diag}]`);
     const { teams } = await new FootballDataClient().teams();
     return {
       ok: true,
