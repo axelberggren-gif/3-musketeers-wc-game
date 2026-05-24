@@ -28,7 +28,7 @@ export async function runSeedTeams() {
     revalidatePath("/admin");
     return { ok: true, ...result } as const;
   } catch (e) {
-    return { ok: false, error: captureServerActionError(e, "runSeedTeams") } as const;
+    return { ok: false, error: await captureServerActionError(e, "runSeedTeams") } as const;
   }
 }
 
@@ -39,7 +39,7 @@ export async function runSyncFixtures() {
     revalidatePath("/admin");
     return { ok: true, ...result } as const;
   } catch (e) {
-    return { ok: false, error: captureServerActionError(e, "runSyncFixtures") } as const;
+    return { ok: false, error: await captureServerActionError(e, "runSyncFixtures") } as const;
   }
 }
 
@@ -50,7 +50,7 @@ export async function runSyncScorers() {
     revalidatePath("/admin");
     return { ok: true, ...result } as const;
   } catch (e) {
-    return { ok: false, error: captureServerActionError(e, "runSyncScorers") } as const;
+    return { ok: false, error: await captureServerActionError(e, "runSyncScorers") } as const;
   }
 }
 
@@ -66,7 +66,7 @@ export async function runCheckToken() {
       sample: teams[0]?.name ?? null,
     } as const;
   } catch (e) {
-    return { ok: false, error: captureServerActionError(e, "runCheckToken") } as const;
+    return { ok: false, error: await captureServerActionError(e, "runCheckToken") } as const;
   }
 }
 
