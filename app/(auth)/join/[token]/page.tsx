@@ -39,9 +39,11 @@ export default async function JoinPage({
     data: { user },
   } = await supabase.auth.getUser();
 
+  let joinError: string | null = null;
   if (user) {
     const result = await consumeInviteForUser(token, user.id);
     if (result.ok) redirect(`/leagues/${result.league_slug}`);
+    joinError = result.error;
   }
 
   return (
@@ -55,18 +57,29 @@ export default async function JoinPage({
           ⚽ KICKOFF<span className="text-pitch-light text-[0.65em]">&apos;26</span>
         </Link>
         <div className="card flex flex-col gap-5">
-          <span
-            className="badge badge-coral self-start -rotate-2"
-            style={{ boxShadow: "3px 3px 0 var(--ink)" }}
-          >
-            🎟 You&rsquo;ve been invited
-          </span>
+          {joinError ? (
+            <span
+              className="badge badge-red self-start"
+              style={{ boxShadow: "3px 3px 0 var(--ink)" }}
+            >
+              ✕ Couldn&rsquo;t join
+            </span>
+          ) : (
+            <span
+              className="badge badge-coral self-start -rotate-2"
+              style={{ boxShadow: "3px 3px 0 var(--ink)" }}
+            >
+              🎟 You&rsquo;ve been invited
+            </span>
+          )}
           <div className="flex flex-col gap-1.5">
             <h1 className="font-display uppercase text-3xl sm:text-4xl leading-none tracking-tight">
               Join {invite.league_name}
             </h1>
             <p className="text-sm text-ink-soft">
-              You&rsquo;ve been invited to a private league. Sign in to accept and start picking.
+              {joinError
+                ? joinError
+                : "You’ve been invited to a private league. Sign in to accept and start picking."}
             </p>
           </div>
           <div
@@ -76,10 +89,21 @@ export default async function JoinPage({
             <span className="truncate">kickoff.app/j/{token.slice(0, 12)}</span>
             <span className="badge badge-gold !py-0 !text-[10px]">Invite</span>
           </div>
-          <LoginForm
-            inviteToken={token}
-            devInstant={process.env.DEV_INSTANT_LOGIN === "true"}
-          />
+          {joinError ? (
+            <div className="flex flex-col gap-2">
+              <Link href="/leagues" className="btn btn-secondary self-start">
+                Back to my leagues
+              </Link>
+              <p className="text-xs text-ink-soft">
+                Ask the league owner to check whether the invite is still active.
+              </p>
+            </div>
+          ) : (
+            <LoginForm
+              inviteToken={token}
+              devInstant={process.env.DEV_INSTANT_LOGIN === "true"}
+            />
+          )}
         </div>
       </div>
     </main>

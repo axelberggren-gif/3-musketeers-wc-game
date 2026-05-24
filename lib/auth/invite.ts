@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import { supabaseService } from "@/lib/supabase/server";
 import { unwrapRelation } from "@/lib/utils";
 
@@ -43,9 +44,38 @@ export async function consumeInviteForUser(token: string, userId: string) {
     p_token: token,
     p_user_id: userId,
   });
-  if (error) return { ok: false, error: error.message } as const;
+  const tokenPrefix = token.slice(0, 8);
+  if (error) {
+    Sentry.captureMessage("consumeInviteForUser: RPC error", {
+      level: "error",
+      tags: { area: "invite" },
+      extra: {
+        user_id: userId,
+        token_prefix: tokenPrefix,
+        pg_code: error.code,
+        pg_details: error.details,
+        pg_hint: error.hint,
+        pg_message: error.message,
+      },
+    });
+    await Sentry.flush(2000);
+    return { ok: false, error: error.message } as const;
+  }
   const row = (Array.isArray(data) ? data[0] : (data as RedeemRow | null)) as RedeemRow | undefined;
   if (!row?.ok || !row.league_slug) {
+    Sentry.captureMessage("consumeInviteForUser: RPC returned !ok", {
+      level: "warning",
+      tags: { area: "invite" },
+      extra: {
+        user_id: userId,
+        token_prefix: tokenPrefix,
+        row_ok: row?.ok,
+        row_league_slug: row?.league_slug,
+        row_error: row?.error,
+        raw_data_shape: Array.isArray(data) ? `array(${data.length})` : typeof data,
+      },
+    });
+    await Sentry.flush(2000);
     return { ok: false, error: row?.error ?? "Invite is invalid or expired." } as const;
   }
   return { ok: true, league_slug: row.league_slug } as const;

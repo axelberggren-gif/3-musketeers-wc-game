@@ -55,12 +55,17 @@ export async function signInWithEmail(
     });
     if (verifyErr) return { ok: false, error: verifyErr.message };
 
-    let destination = "/leagues";
     if (inviteToken) {
       const consumed = await consumeInviteForUser(inviteToken, user.id);
-      if (consumed.ok) destination = `/leagues/${consumed.league_slug}`;
+      if (!consumed.ok) {
+        return {
+          ok: false,
+          error: `Signed in, but couldn't join the league: ${consumed.error}`,
+        };
+      }
+      return { ok: true, mode: "instant", url: `/leagues/${consumed.league_slug}` };
     }
-    return { ok: true, mode: "instant", url: destination };
+    return { ok: true, mode: "instant", url: "/leagues" };
   }
 
   const supabase = await supabaseServer();
