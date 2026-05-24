@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import * as Sentry from "@sentry/nextjs";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { seedTeams, syncFixtures, syncScorers } from "@/lib/football-data/sync";
 import { FootballDataClient } from "@/lib/football-data/client";
@@ -28,7 +29,7 @@ export async function runSeedTeams() {
     revalidatePath("/admin");
     return { ok: true, ...result } as const;
   } catch (e) {
-    return { ok: false, error: captureServerActionError(e, "runSeedTeams") } as const;
+    return { ok: false, error: await captureServerActionError(e, "runSeedTeams") } as const;
   }
 }
 
@@ -39,7 +40,7 @@ export async function runSyncFixtures() {
     revalidatePath("/admin");
     return { ok: true, ...result } as const;
   } catch (e) {
-    return { ok: false, error: captureServerActionError(e, "runSyncFixtures") } as const;
+    return { ok: false, error: await captureServerActionError(e, "runSyncFixtures") } as const;
   }
 }
 
@@ -50,13 +51,20 @@ export async function runSyncScorers() {
     revalidatePath("/admin");
     return { ok: true, ...result } as const;
   } catch (e) {
-    return { ok: false, error: captureServerActionError(e, "runSyncScorers") } as const;
+    return { ok: false, error: await captureServerActionError(e, "runSyncScorers") } as const;
   }
 }
 
 export async function runCheckToken() {
   await assertAdmin();
+  // TEMP Sentry diagnostic — remove once capture is verified.
+  const dsnSeen = Boolean(process.env.NEXT_PUBLIC_SENTRY_DSN);
+  const clientReady = Boolean(Sentry.getClient());
+  const runtime = process.env.NEXT_RUNTIME ?? "unknown";
+  const vercelEnv = process.env.VERCEL_ENV ?? "local";
+  const diag = `dsn=${dsnSeen} client=${clientReady} runtime=${runtime} env=${vercelEnv}`;
   try {
+    throw new Error(`sentry-smoke-test [${diag}]`);
     const { teams } = await new FootballDataClient().teams();
     return {
       ok: true,
@@ -64,7 +72,7 @@ export async function runCheckToken() {
       sample: teams[0]?.name ?? null,
     } as const;
   } catch (e) {
-    return { ok: false, error: captureServerActionError(e, "runCheckToken") } as const;
+    return { ok: false, error: await captureServerActionError(e, "runCheckToken") } as const;
   }
 }
 
