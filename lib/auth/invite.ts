@@ -1,29 +1,5 @@
-import { cookies } from "next/headers";
 import { supabaseService } from "@/lib/supabase/server";
 import { unwrapRelation } from "@/lib/utils";
-
-const COOKIE_NAME = "invite_token";
-
-export async function setPendingInvite(token: string) {
-  const store = await cookies();
-  store.set(COOKIE_NAME, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 60 * 60 * 24,
-  });
-}
-
-export async function readPendingInvite() {
-  const store = await cookies();
-  return store.get(COOKIE_NAME)?.value ?? null;
-}
-
-export async function clearPendingInvite() {
-  const store = await cookies();
-  store.delete(COOKIE_NAME);
-}
 
 export interface ValidatedInvite {
   invite_id: string;
