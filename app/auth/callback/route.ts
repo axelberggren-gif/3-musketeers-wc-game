@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
-import { consumeInviteForUser } from "@/lib/auth/invite";
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
@@ -23,10 +22,10 @@ export async function GET(request: NextRequest) {
   if (!user) return NextResponse.redirect(`${origin}/login`);
 
   if (inviteToken) {
-    const result = await consumeInviteForUser(inviteToken, user.id);
-    if (result.ok) {
-      return NextResponse.redirect(`${origin}/leagues/${result.league_slug}`);
-    }
+    // Bounce through /join/[token] so the single redemption code path
+    // handles success (redirect to league) and failure (visible error)
+    // uniformly across magic-link and DEV_INSTANT_LOGIN flows.
+    return NextResponse.redirect(`${origin}/join/${inviteToken}`);
   }
 
   return NextResponse.redirect(`${origin}/leagues`);
