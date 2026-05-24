@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { supabaseServer } from "@/lib/supabase/server";
-import { consumeInviteForUser, setPendingInvite, validateInviteToken } from "@/lib/auth/invite";
+import { consumeInviteForUser, validateInviteToken } from "@/lib/auth/invite";
 import { LoginForm } from "../../login/LoginForm";
 
 export default async function JoinPage({
@@ -43,8 +43,6 @@ export default async function JoinPage({
     const result = await consumeInviteForUser(token, user.id);
     if (result.ok) redirect(`/leagues/${result.league_slug}`);
   }
-
-  await setPendingInvite(token);
 
   return (
     <main className="flex-1 flex items-center justify-center px-4 py-12 sm:py-20">
