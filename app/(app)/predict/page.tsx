@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { computeLockState } from "@/lib/scoring/lock";
 import { unwrapRelation } from "@/lib/utils";
@@ -62,6 +63,38 @@ export default async function Round1Page() {
       .limit(1)
       .maybeSingle(),
   ]);
+
+  // Surface silent-empty failures of the team/player catalogue queries. The most
+  // common cause is a migration not yet applied to the target DB (e.g. 0005's
+  // teams.fifa_ranking column) — PostgREST returns 400 and supabase-js fills
+  // `error` while data stays null, the `?? []` coalesces below empty out every
+  // picker, and the user sees blank dropdowns with no signal in the logs.
+  if (teamsRes.error) {
+    Sentry.captureMessage("predict: teams catalogue query failed", {
+      level: "error",
+      tags: { area: "predict", feature: "tournament_predictions" },
+      extra: {
+        user_id: user.id,
+        pg_code: teamsRes.error.code,
+        pg_message: teamsRes.error.message,
+        pg_details: teamsRes.error.details,
+        pg_hint: teamsRes.error.hint,
+      },
+    });
+  }
+  if (playersRes.error) {
+    Sentry.captureMessage("predict: players catalogue query failed", {
+      level: "error",
+      tags: { area: "predict", feature: "tournament_predictions" },
+      extra: {
+        user_id: user.id,
+        pg_code: playersRes.error.code,
+        pg_message: playersRes.error.message,
+        pg_details: playersRes.error.details,
+        pg_hint: playersRes.error.hint,
+      },
+    });
+  }
 
   const tournament = tournamentRes.data;
   const locks = computeLockState(tournament);
