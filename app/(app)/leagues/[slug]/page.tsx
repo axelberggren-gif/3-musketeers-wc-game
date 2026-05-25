@@ -3,6 +3,9 @@ import { notFound } from "next/navigation";
 import { supabaseServer } from "@/lib/supabase/server";
 import { CountryFlag } from "@/components/CountryFlag";
 import { isoToLocal, unwrapRelation } from "@/lib/utils";
+import { BanterFeed } from "@/components/banter/BanterFeed";
+import type { BanterMessage, BanterReply } from "@/lib/supabase/types";
+import type { ProfileLite } from "@/components/banter/BanterMessage";
 
 export default async function LeagueHomePage({
   params,
@@ -23,7 +26,7 @@ export default async function LeagueHomePage({
     .maybeSingle();
   if (!league) notFound();
 
-  const [standingsRes, upcomingRes, recentRes] = await Promise.all([
+  const [standingsRes, upcomingRes, recentRes, messagesRes, membersRes] = await Promise.all([
     supabase
       .from("league_standings")
       .select("*")
@@ -46,10 +49,47 @@ export default async function LeagueHomePage({
       .eq("status", "FINISHED")
       .order("kickoff_at", { ascending: false })
       .limit(5),
+    supabase
+      .from("banter_messages")
+      .select("id, league_id, user_id, body, created_at")
+      .eq("league_id", league.id)
+      .order("created_at", { ascending: false })
+      .limit(50),
+    supabase
+      .from("league_members")
+      .select("user_id, profile:user_id(username, display_name)")
+      .eq("league_id", league.id),
   ]);
 
+  const messagesDesc = (messagesRes.data ?? []) as BanterMessage[];
+  // Ascending order for state; render layer re-sorts descending.
+  const initialMessages = [...messagesDesc].reverse();
+  const messageIds = initialMessages.map((m) => m.id);
+
+  const repliesRes = messageIds.length
+    ? await supabase
+        .from("banter_replies")
+        .select("id, message_id, user_id, body, created_at")
+        .in("message_id", messageIds)
+        .order("created_at", { ascending: true })
+    : { data: [] as BanterReply[] };
+
+  const initialReplies: Record<string, BanterReply[]> = {};
+  for (const r of (repliesRes.data ?? []) as BanterReply[]) {
+    (initialReplies[r.message_id] ??= []).push(r);
+  }
+
+  const profilesById: Record<string, ProfileLite> = {};
+  for (const row of (membersRes.data ?? []) as Array<{
+    user_id: string;
+    profile: ProfileLite | ProfileLite[] | null;
+  }>) {
+    const p = unwrapRelation(row.profile);
+    if (p) profilesById[row.user_id] = p;
+  }
+
   return (
-    <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-10 flex flex-col gap-6">
+    <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10 flex flex-col gap-6">
       <header className="flex flex-col gap-3">
         <span
           className="badge badge-gold self-start -rotate-2"
@@ -73,90 +113,104 @@ export default async function LeagueHomePage({
         </div>
       </header>
 
-      <section className="card flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <h2 className="font-display uppercase tracking-wide text-base flex items-center gap-2">
-            <span
-              className="w-6 h-6 rounded-md bg-gold border-2 border-ink inline-flex items-center justify-center text-xs"
-              aria-hidden
-            >
-              🏆
-            </span>
-            Top 5
-          </h2>
-          <Link
-            href={`/leagues/${slug}/leaderboard`}
-            className="font-mono-sticker text-xs text-ink-soft hover:text-ink uppercase tracking-widest"
-          >
-            See full board →
-          </Link>
-        </div>
-        {(standingsRes.data ?? []).length === 0 ? (
-          <p className="text-sm text-ink-soft">
-            No points awarded yet. Standings populate as matches finish.
-          </p>
-        ) : (
-          <ol className="flex flex-col gap-2">
-            {(standingsRes.data ?? []).map((row, idx) => (
-              <li
-                key={row.user_id}
-                className="flex items-center justify-between gap-2 rounded-lg border-2 border-ink bg-paper-2 px-3 py-2"
-                style={{ boxShadow: "2px 2px 0 var(--ink)" }}
-              >
-                <span className="flex items-center gap-3">
-                  <span
-                    className={[
-                      "inline-flex items-center justify-center w-8 h-8 rounded-md border-2 border-ink font-display text-sm",
-                      idx === 0
-                        ? "bg-gold"
-                        : idx === 1
-                          ? "bg-paper"
-                          : idx === 2
-                            ? "bg-coral text-white"
-                            : "bg-white",
-                    ].join(" ")}
-                  >
-                    {idx + 1}
-                  </span>
-                  <Link
-                    href={`/profile/${row.username}`}
-                    className="font-display uppercase text-sm tracking-wide hover:text-coral"
-                  >
-                    {row.display_name ?? row.username}
-                  </Link>
+      <div className="grid lg:grid-cols-[1.8fr_1fr] gap-6 items-start">
+        <div className="flex flex-col gap-6 min-w-0">
+          <section className="card flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <h2 className="font-display uppercase tracking-wide text-base flex items-center gap-2">
+                <span
+                  className="w-6 h-6 rounded-md bg-gold border-2 border-ink inline-flex items-center justify-center text-xs"
+                  aria-hidden
+                >
+                  🏆
                 </span>
-                <span className="font-display text-xl tabular-nums">{row.total_points}</span>
-              </li>
-            ))}
-          </ol>
-        )}
-      </section>
+                Top 5
+              </h2>
+              <Link
+                href={`/leagues/${slug}/leaderboard`}
+                className="font-mono-sticker text-xs text-ink-soft hover:text-ink uppercase tracking-widest"
+              >
+                See full board →
+              </Link>
+            </div>
+            {(standingsRes.data ?? []).length === 0 ? (
+              <p className="text-sm text-ink-soft">
+                No points awarded yet. Standings populate as matches finish.
+              </p>
+            ) : (
+              <ol className="flex flex-col gap-2">
+                {(standingsRes.data ?? []).map((row, idx) => (
+                  <li
+                    key={row.user_id}
+                    className="flex items-center justify-between gap-2 rounded-lg border-2 border-ink bg-paper-2 px-3 py-2"
+                    style={{ boxShadow: "2px 2px 0 var(--ink)" }}
+                  >
+                    <span className="flex items-center gap-3">
+                      <span
+                        className={[
+                          "inline-flex items-center justify-center w-8 h-8 rounded-md border-2 border-ink font-display text-sm",
+                          idx === 0
+                            ? "bg-gold"
+                            : idx === 1
+                              ? "bg-paper"
+                              : idx === 2
+                                ? "bg-coral text-white"
+                                : "bg-white",
+                        ].join(" ")}
+                      >
+                        {idx + 1}
+                      </span>
+                      <Link
+                        href={`/profile/${row.username}`}
+                        className="font-display uppercase text-sm tracking-wide hover:text-coral"
+                      >
+                        {row.display_name ?? row.username}
+                      </Link>
+                    </span>
+                    <span className="font-display text-xl tabular-nums">{row.total_points}</span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
 
-      <div className="grid md:grid-cols-2 gap-4">
-        <section className="card flex flex-col gap-3">
-          <h2 className="font-display uppercase tracking-wide text-base">Upcoming matches</h2>
-          {(upcomingRes.data ?? []).length === 0 ? (
-            <p className="text-sm text-ink-soft">No upcoming matches.</p>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {upcomingRes.data!.map((m) => (
-                <MatchRow key={m.id} match={m} />
-              ))}
-            </ul>
-          )}
-        </section>
-        <section className="card flex flex-col gap-3">
-          <h2 className="font-display uppercase tracking-wide text-base">Recent results</h2>
-          {(recentRes.data ?? []).length === 0 ? (
-            <p className="text-sm text-ink-soft">No matches finished yet.</p>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {recentRes.data!.map((m) => (
-                <MatchRow key={m.id} match={m} showScore />
-              ))}
-            </ul>
-          )}
-        </section>
+          <div className="grid md:grid-cols-2 gap-4">
+            <section className="card flex flex-col gap-3">
+              <h2 className="font-display uppercase tracking-wide text-base">Upcoming matches</h2>
+              {(upcomingRes.data ?? []).length === 0 ? (
+                <p className="text-sm text-ink-soft">No upcoming matches.</p>
+              ) : (
+                <ul className="flex flex-col gap-2">
+                  {upcomingRes.data!.map((m) => (
+                    <MatchRow key={m.id} match={m} />
+                  ))}
+                </ul>
+              )}
+            </section>
+            <section className="card flex flex-col gap-3">
+              <h2 className="font-display uppercase tracking-wide text-base">Recent results</h2>
+              {(recentRes.data ?? []).length === 0 ? (
+                <p className="text-sm text-ink-soft">No matches finished yet.</p>
+              ) : (
+                <ul className="flex flex-col gap-2">
+                  {recentRes.data!.map((m) => (
+                    <MatchRow key={m.id} match={m} showScore />
+                  ))}
+                </ul>
+              )}
+            </section>
+          </div>
+        </div>
+
+        <aside className="flex flex-col gap-6 min-w-0">
+          <BanterFeed
+            leagueId={league.id}
+            currentUserId={user.id}
+            initialMessages={initialMessages}
+            initialReplies={initialReplies}
+            profilesById={profilesById}
+          />
+        </aside>
       </div>
     </main>
   );
