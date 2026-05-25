@@ -155,6 +155,18 @@ export interface PlayerPropPrediction {
   submitted_at: string;
 }
 
+export type PickKind = "match" | "bracket" | "tournament" | "prop";
+export type PickReactionEmoji = "🔥" | "💩" | "😱" | "👍";
+
+export interface PickReaction {
+  id: string;
+  pick_id: string;
+  pick_kind: PickKind;
+  user_id: string;
+  emoji: PickReactionEmoji;
+  created_at: string;
+}
+
 export interface PointAward {
   id: string;
   user_id: string;

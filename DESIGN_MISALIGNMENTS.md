@@ -25,22 +25,21 @@ inline reply composer. Lives on the league sidebar (desktop) and league screen (
 
 **Why deferred**: net-new DB schema + RLS work, sits outside a visual refresh.
 
-## 2. Pick reactions (🔥 💩 😱 👍)
+## 2. Pick reactions (🔥 💩 😱 👍) — **Shipped 2026-05-25 (#36)**
 
-**Design**: `project/sticker-d.jsx` + `project/mobile-c.jsx`. Recent-picks rows and
-friends'-picks lists carry a reaction strip. Each row shows current totals as
-tappable chips (your reaction highlighted in gold); a "+ react" trigger opens a small
-palette above the row.
+Match-kind reactions ship in #36: migration `0011_pick_reactions.sql` (polymorphic
+`pick_id` / `pick_kind` with CHECK on the four emojis + four kinds, league-mate
+read RLS via inline EXISTS, write-self only), `togglePickReaction` server action
+(select-then-delete-or-insert toggle), `loadPickReactions` aggregator (single
+round-trip), and `components/social/PickReactionStrip.tsx` (paper-2 / gold pill
+chips, dashed `+ react` trigger, optimistic rollback). Wired into
+`/match/[id]` friends-picks list and a new `/profile/[username]` Recent picks
+section.
 
-**Needed to ship**:
-- New table: `pick_reactions(pick_id text, pick_kind text, user_id uuid, emoji text)`
-  with unique `(pick_id, user_id, emoji)` constraint so a user can toggle exactly one
-  of each emoji per pick. `pick_kind` discriminates match / bracket / prop.
-- RLS: anyone in the same league can read; only the author can insert/delete their own.
-- Server action `togglePickReaction(pickId, kind, emoji)`.
-- Aggregation query for counts when loading match detail and profile recent picks.
-
-**Why deferred**: net-new schema + cohort aggregation, requires its own RLS review.
+**Still deferred**: bracket / tournament / prop reactions (the DB CHECK allows
+the kinds but no UI surface mints them), Supabase Realtime broadcast for live
+counts (still revalidate-on-tap), and orphan cleanup when a host pick is
+deleted.
 
 ## 3. Pulse stats (League / Tournament)
 
