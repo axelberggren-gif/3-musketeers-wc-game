@@ -10,37 +10,43 @@ real, and a one-line rationale for why it didn't land in the foundation PR.
 
 ## 1. Banter / chat
 
-**Design**: `project/sticker-b.jsx:StickerBanter` + `project/mobile-b.jsx`. Sticker
-composer ("Talk your shit…"), 180-char counter that flips coral on overflow, quick-insert
-emoji chips (🔥 😭 💀 🤡), threaded replies with stacked avatars + collapsible threads,
-inline reply composer. Lives on the league sidebar (desktop) and league screen (mobile).
+**Status (2026-05-25)**: shipped in issue #35 — composer with 180-char counter +
+emoji chips, threaded replies (collapsed by default), Supabase Realtime live
+updates via `league:<id>:banter`, optimistic insert with rollback. Migration
+`0011_banter.sql`, server actions in `lib/banter/actions.ts`, components in
+`components/banter/`. League home restructured to 2-column desktop layout
+(`lg:grid-cols-[1.8fr_1fr]`) with banter in the right sidebar.
 
-**Needed to ship**:
-- New tables: `banter_messages(league_id, user_id, body, created_at)` and
-  `banter_replies(message_id, user_id, body, created_at)`.
-- RLS: members of the league can read + insert; only the author can delete their own.
-- Server actions in `lib/banter/actions.ts` for post + reply + delete + react.
-- Realtime subscription on the league channel for live updates.
-- Optimistic insert with rollback (mirror `MatchPickCard` pattern).
+**Still deferred from the design**:
+- **Avatar circles / stacked-avatar reply preview** — the design renders emoji
+  avatars (⚡ 🦊 🐺 🐝) and a stacked-avatar reply-count preview. v1 ships
+  username-only display (matches the rest of the app, which has no Avatar
+  component yet). Needs either a `profile_pic_url` column + Supabase Storage
+  bucket + upload UI, or a minimal initials-circle component reused across
+  leaderboard / banter / member list.
+- **Reactions on banter posts** — the design's emoji chips are for *composing*;
+  reacting to other users' posts (different from §2 pick-reactions) isn't
+  scoped. Would reuse the `pick_reactions` table shape with a `target_kind` =
+  `banter_message` / `banter_reply`.
+- **Edit support** — design shows post + delete but no edit affordance; shipped
+  immutable in v1.
+- **"Load older" pagination** beyond the first 50 messages.
 
-**Why deferred**: net-new DB schema + RLS work, sits outside a visual refresh.
+## 2. Pick reactions (🔥 💩 😱 👍) — **Shipped 2026-05-25 (#36)**
 
-## 2. Pick reactions (🔥 💩 😱 👍)
+Match-kind reactions ship in #36: migration `0012_pick_reactions.sql` (polymorphic
+`pick_id` / `pick_kind` with CHECK on the four emojis + four kinds, league-mate
+read RLS via inline EXISTS, write-self only), `togglePickReaction` server action
+(select-then-delete-or-insert toggle), `loadPickReactions` aggregator (single
+round-trip), and `components/social/PickReactionStrip.tsx` (paper-2 / gold pill
+chips, dashed `+ react` trigger, optimistic rollback). Wired into
+`/match/[id]` friends-picks list and a new `/profile/[username]` Recent picks
+section.
 
-**Design**: `project/sticker-d.jsx` + `project/mobile-c.jsx`. Recent-picks rows and
-friends'-picks lists carry a reaction strip. Each row shows current totals as
-tappable chips (your reaction highlighted in gold); a "+ react" trigger opens a small
-palette above the row.
-
-**Needed to ship**:
-- New table: `pick_reactions(pick_id text, pick_kind text, user_id uuid, emoji text)`
-  with unique `(pick_id, user_id, emoji)` constraint so a user can toggle exactly one
-  of each emoji per pick. `pick_kind` discriminates match / bracket / prop.
-- RLS: anyone in the same league can read; only the author can insert/delete their own.
-- Server action `togglePickReaction(pickId, kind, emoji)`.
-- Aggregation query for counts when loading match detail and profile recent picks.
-
-**Why deferred**: net-new schema + cohort aggregation, requires its own RLS review.
+**Still deferred**: bracket / tournament / prop reactions (the DB CHECK allows
+the kinds but no UI surface mints them), Supabase Realtime broadcast for live
+counts (still revalidate-on-tap), and orphan cleanup when a host pick is
+deleted.
 
 ## 3. Pulse stats (League / Tournament)
 

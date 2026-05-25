@@ -155,6 +155,18 @@ export interface PlayerPropPrediction {
   submitted_at: string;
 }
 
+export type PickKind = "match" | "bracket" | "tournament" | "prop";
+export type PickReactionEmoji = "🔥" | "💩" | "😱" | "👍";
+
+export interface PickReaction {
+  id: string;
+  pick_id: string;
+  pick_kind: PickKind;
+  user_id: string;
+  emoji: PickReactionEmoji;
+  created_at: string;
+}
+
 export interface PointAward {
   id: string;
   user_id: string;
@@ -176,4 +188,20 @@ export interface LeagueStandingsRow {
   bracket_points: number;
   tournament_points: number;
   prop_points: number;
+}
+
+export interface BanterMessage {
+  id: string;
+  league_id: string;
+  user_id: string;
+  body: string;
+  created_at: string;
+}
+
+export interface BanterReply {
+  id: string;
+  message_id: string;
+  user_id: string;
+  body: string;
+  created_at: string;
 }

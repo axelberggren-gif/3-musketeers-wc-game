@@ -1,6 +1,23 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { supabaseServer } from "@/lib/supabase/server";
 import { loadProfileStats } from "@/lib/stats/profile";
+import { PickReactionStrip } from "@/components/social/PickReactionStrip";
+import { loadPickReactions } from "@/lib/predictions/reactions";
+import { aggregateKey } from "@/lib/predictions/reactions-shared";
+import { unwrapRelation } from "@/lib/utils";
+import type { Pick1X2 } from "@/lib/supabase/types";
+
+type TeamLite = { code: string; name: string };
+type MatchLite = {
+  id: string;
+  kickoff_at: string;
+  status: string | null;
+  home_score: number | null;
+  away_score: number | null;
+  home: TeamLite | TeamLite[] | null;
+  away: TeamLite | TeamLite[] | null;
+};
 
 export default async function ProfilePage({
   params,
@@ -20,6 +37,22 @@ export default async function ProfilePage({
   if (!profile) notFound();
 
   const stats = await loadProfileStats(profile.id, viewerData.user?.id);
+
+  const { data: recentPicksRaw } = await supabase
+    .from("match_predictions")
+    .select(
+      "id, pick, submitted_at, match:match_id(id, kickoff_at, status, home_score, away_score, home:home_team_id(code, name), away:away_team_id(code, name))",
+    )
+    .eq("user_id", profile.id)
+    .order("submitted_at", { ascending: false })
+    .limit(10);
+
+  const recentPicks = (recentPicksRaw ?? []).filter((r) => r.match);
+
+  const reactionMap = await loadPickReactions(
+    recentPicks.map((r) => ({ id: r.id as string, kind: "match" as const })),
+    viewerData.user?.id ?? null,
+  );
 
   const initial = (profile.display_name ?? profile.username).slice(0, 1).toUpperCase();
 
@@ -59,6 +92,51 @@ export default async function ProfilePage({
         <Stat label="Tournament" value={stats.tournamentPoints} subtle />
         <Stat label="Props" value={stats.propPoints} subtle />
       </section>
+
+      {recentPicks.length > 0 && (
+        <section className="card flex flex-col gap-3">
+          <h2 className="font-display uppercase tracking-wide text-base">Recent picks</h2>
+          <ul className="flex flex-col divide-y divide-dashed divide-ink-soft/40">
+            {recentPicks.map((row) => {
+              const match = unwrapRelation(row.match as MatchLite | MatchLite[] | null);
+              const home = unwrapRelation(match?.home ?? null);
+              const away = unwrapRelation(match?.away ?? null);
+              const pick = row.pick as Pick1X2;
+              const finished = match?.status === "FINISHED";
+              const score =
+                finished && match
+                  ? `${match.home_score ?? 0}–${match.away_score ?? 0}`
+                  : null;
+              const agg = reactionMap.get(aggregateKey("match", row.id as string));
+              return (
+                <li key={row.id as string} className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <Link
+                      href={`/match/${match?.id}`}
+                      className="font-display uppercase text-sm tracking-wide hover:text-coral truncate"
+                    >
+                      {home?.code ?? "?"} <span className="text-ink-soft">vs</span> {away?.code ?? "?"}
+                      {score && (
+                        <span className="font-mono-sticker text-xs text-ink-soft ml-2">{score}</span>
+                      )}
+                    </Link>
+                    <span className="badge badge-ink !text-[10px]">{pick}</span>
+                  </div>
+                  {agg && (
+                    <PickReactionStrip
+                      pickId={row.id as string}
+                      pickKind="match"
+                      initialCounts={agg.counts}
+                      initialMine={Array.from(agg.mine)}
+                      revalidatePath={`/profile/${profile.username}`}
+                    />
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       <section
         className="card flex flex-col gap-3"

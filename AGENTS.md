@@ -46,6 +46,7 @@ when they touch the corresponding area.
 @lib/football-data/CLAUDE.md
 @supabase/migrations/CLAUDE.md
 @components/predict/CLAUDE.md
+@components/banter/CLAUDE.md
 
 ## Global invariants (do not break)
 
