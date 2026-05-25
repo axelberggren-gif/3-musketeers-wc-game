@@ -3,6 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { supabaseServer } from "@/lib/supabase/server";
 import { computeLockState } from "@/lib/scoring/lock";
+import {
+  PICK_REACTION_EMOJI,
+  type PickKind,
+  type PickReactionEmoji,
+} from "@/lib/predictions/reactions-shared";
 import type { Pick1X2 } from "@/lib/supabase/types";
 
 async function authedClient() {
@@ -124,5 +129,46 @@ export async function setBracketPick(slot: string, teamId: string) {
     });
   if (error) return { ok: false, error: error.message } as const;
   revalidatePath("/predict/bracket");
+  return { ok: true } as const;
+}
+
+const PICK_KINDS = ["match", "bracket", "tournament", "prop"] as const;
+
+export async function togglePickReaction(
+  pickId: string,
+  kind: PickKind,
+  emoji: PickReactionEmoji,
+  revalidate?: string,
+) {
+  if (!PICK_KINDS.includes(kind)) {
+    return { ok: false, error: "Invalid pick kind." } as const;
+  }
+  if (!PICK_REACTION_EMOJI.includes(emoji)) {
+    return { ok: false, error: "Invalid emoji." } as const;
+  }
+  const { supabase, user } = await authedClient();
+  const { data: existing, error: selErr } = await supabase
+    .from("pick_reactions")
+    .select("id")
+    .eq("pick_id", pickId)
+    .eq("pick_kind", kind)
+    .eq("user_id", user.id)
+    .eq("emoji", emoji)
+    .maybeSingle();
+  if (selErr) return { ok: false, error: selErr.message } as const;
+
+  if (existing) {
+    const { error } = await supabase
+      .from("pick_reactions")
+      .delete()
+      .eq("id", existing.id);
+    if (error) return { ok: false, error: error.message } as const;
+  } else {
+    const { error } = await supabase
+      .from("pick_reactions")
+      .insert({ pick_id: pickId, pick_kind: kind, user_id: user.id, emoji });
+    if (error) return { ok: false, error: error.message } as const;
+  }
+  if (revalidate) revalidatePath(revalidate);
   return { ok: true } as const;
 }
