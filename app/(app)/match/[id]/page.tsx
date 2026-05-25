@@ -2,7 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { supabaseServer } from "@/lib/supabase/server";
 import { CountryFlag } from "@/components/CountryFlag";
+import { PickReactionStrip } from "@/components/social/PickReactionStrip";
 import { matchIsLocked } from "@/lib/scoring/lock";
+import { loadPickReactions } from "@/lib/predictions/reactions";
+import { aggregateKey } from "@/lib/predictions/reactions-shared";
 import { isoToLocal, unwrapRelation } from "@/lib/utils";
 import type { Pick1X2 } from "@/lib/supabase/types";
 
@@ -45,7 +48,7 @@ export default async function MatchPage({
   const { data: friendsPicks } = locked
     ? await supabase
         .from("match_predictions")
-        .select("pick, profile:user_id(username, display_name)")
+        .select("id, pick, profile:user_id(username, display_name)")
         .eq("match_id", id)
     : { data: null };
 
@@ -60,6 +63,13 @@ export default async function MatchPage({
           { HOME: 0, DRAW: 0, AWAY: 0 },
         )
       : null;
+
+  const reactionMap = friendsPicks
+    ? await loadPickReactions(
+        friendsPicks.map((r) => ({ id: r.id as string, kind: "match" as const })),
+        user.id,
+      )
+    : new Map();
 
   const finished = match.status === "FINISHED";
   const live = match.status === "IN_PLAY" || match.status === "PAUSED";
@@ -133,19 +143,32 @@ export default async function MatchPage({
             {friendsPicks.map((row, i) => {
               const profile = unwrapRelation(row.profile as ProfileRel | ProfileRel[] | null);
               const pick = row.pick as Pick1X2;
+              const pickId = row.id as string;
+              const agg = reactionMap.get(aggregateKey("match", pickId));
               return (
                 <li
                   key={`${profile?.username}-${i}`}
-                  className="flex items-center justify-between gap-2 rounded-lg border-2 border-ink bg-paper-2 px-3 py-2"
+                  className="flex flex-col gap-2 rounded-lg border-2 border-ink bg-paper-2 px-3 py-2"
                   style={{ boxShadow: "2px 2px 0 var(--ink)" }}
                 >
-                  <Link
-                    href={`/profile/${profile?.username}`}
-                    className="font-display uppercase text-sm tracking-wide hover:text-coral"
-                  >
-                    {profile?.display_name ?? profile?.username}
-                  </Link>
-                  <span className="badge badge-ink !text-[10px]">{pick}</span>
+                  <div className="flex items-center justify-between gap-2">
+                    <Link
+                      href={`/profile/${profile?.username}`}
+                      className="font-display uppercase text-sm tracking-wide hover:text-coral"
+                    >
+                      {profile?.display_name ?? profile?.username}
+                    </Link>
+                    <span className="badge badge-ink !text-[10px]">{pick}</span>
+                  </div>
+                  {agg && (
+                    <PickReactionStrip
+                      pickId={pickId}
+                      pickKind="match"
+                      initialCounts={agg.counts}
+                      initialMine={Array.from(agg.mine)}
+                      revalidatePath={`/match/${id}`}
+                    />
+                  )}
                 </li>
               );
             })}
