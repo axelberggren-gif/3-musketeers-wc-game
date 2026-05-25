@@ -26,6 +26,7 @@ export default async function Round1Page() {
     tpRes,
     propsRes,
     teamsRes,
+    rankingsRes,
     playersRes,
     groupPicksRes,
     lastSyncRes,
@@ -45,7 +46,14 @@ export default async function Round1Page() {
       .eq("user_id", user.id)
       .maybeSingle(),
     supabase.from("player_prop_predictions").select("prop_key, player_id").eq("user_id", user.id),
-    supabase.from("teams").select("id, name, code, group_letter, fifa_ranking").order("name"),
+    // The teams catalogue is split: core columns (always present since 0001)
+    // and a separate fifa_ranking fetch that is allowed to fail. Without the
+    // split a missing 0005 column (e.g. `fifa_ranking`) 400s the whole query
+    // and wipes every team-picker on /predict; with the split the dropdowns
+    // stay populated and only the dark-horse ranking sort degrades. The
+    // ranking error is still captured to Sentry so the drift is visible.
+    supabase.from("teams").select("id, name, code, group_letter").order("name"),
+    supabase.from("teams").select("id, fifa_ranking"),
     supabase
       .from("players")
       .select("id, name, team:team_id(name)")
@@ -64,11 +72,10 @@ export default async function Round1Page() {
       .maybeSingle(),
   ]);
 
-  // Surface silent-empty failures of the team/player catalogue queries. The most
-  // common cause is a migration not yet applied to the target DB (e.g. 0005's
-  // teams.fifa_ranking column) — PostgREST returns 400 and supabase-js fills
-  // `error` while data stays null, the `?? []` coalesces below empty out every
-  // picker, and the user sees blank dropdowns with no signal in the logs.
+  // Surface silent-empty failures of the team/player catalogue queries to
+  // Sentry. `rankingsRes` is the one expected to fail when 0005 hasn't been
+  // applied (warning, not error: the form still works without ranks); the
+  // other two would actually break the form (error).
   if (teamsRes.error) {
     Sentry.captureMessage("predict: teams catalogue query failed", {
       level: "error",
@@ -79,6 +86,19 @@ export default async function Round1Page() {
         pg_message: teamsRes.error.message,
         pg_details: teamsRes.error.details,
         pg_hint: teamsRes.error.hint,
+      },
+    });
+  }
+  if (rankingsRes.error) {
+    Sentry.captureMessage("predict: teams ranking query failed", {
+      level: "warning",
+      tags: { area: "predict", feature: "tournament_predictions" },
+      extra: {
+        user_id: user.id,
+        pg_code: rankingsRes.error.code,
+        pg_message: rankingsRes.error.message,
+        pg_details: rankingsRes.error.details,
+        pg_hint: rankingsRes.error.hint,
       },
     });
   }
@@ -95,6 +115,13 @@ export default async function Round1Page() {
       },
     });
   }
+
+  const rankingByTeamId = new Map<string, number | null>(
+    (rankingsRes.data ?? []).map((r) => [
+      r.id as string,
+      (r as { fifa_ranking?: number | null }).fifa_ranking ?? null,
+    ]),
+  );
 
   const tournament = tournamentRes.data;
   const locks = computeLockState(tournament);
@@ -116,7 +143,7 @@ export default async function Round1Page() {
     id: t.id,
     name: t.name,
     code: t.code,
-    fifa_ranking: (t as { fifa_ranking?: number | null }).fifa_ranking ?? null,
+    fifa_ranking: rankingByTeamId.get(t.id) ?? null,
   }));
   const teamsByGroup: Record<string, TeamOption[]> = {};
   for (const t of teamsRes.data ?? []) {
@@ -126,7 +153,7 @@ export default async function Round1Page() {
       id: t.id,
       name: t.name,
       code: t.code,
-      fifa_ranking: (t as { fifa_ranking?: number | null }).fifa_ranking ?? null,
+      fifa_ranking: rankingByTeamId.get(t.id) ?? null,
     });
   }
   const groupPicks = Object.fromEntries(

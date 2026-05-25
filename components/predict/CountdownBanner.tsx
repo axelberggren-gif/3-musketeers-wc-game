@@ -9,16 +9,43 @@ interface Props {
 }
 
 export function CountdownBanner({ target, label, lockedLabel = "Picks locked." }: Props) {
-  const [remaining, setRemaining] = useState(() =>
-    Math.max(0, new Date(target).getTime() - Date.now()),
-  );
+  // remaining stays null until the client-side useEffect runs. The server
+  // renders a tick-less placeholder so the SSR HTML doesn't depend on
+  // `Date.now()` (which would differ from the value computed at hydration
+  // time and trigger a React hydration mismatch).
+  const [remaining, setRemaining] = useState<number | null>(null);
 
   useEffect(() => {
-    const i = setInterval(() => {
-      setRemaining(Math.max(0, new Date(target).getTime() - Date.now()));
-    }, 1000);
-    return () => clearInterval(i);
+    const tick = () => setRemaining(Math.max(0, new Date(target).getTime() - Date.now()));
+    // Schedule the first tick async so the SSR render and the hydration render
+    // both produce the `--:--:--` placeholder; once mounted the interval drives
+    // the countdown.
+    const raf = requestAnimationFrame(tick);
+    const i = setInterval(tick, 1000);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearInterval(i);
+    };
   }, [target]);
+
+  if (remaining === null) {
+    return (
+      <div
+        className="card !p-4 flex items-center justify-between gap-4 flex-wrap"
+        style={{ boxShadow: "4px 4px 0 var(--coral)" }}
+      >
+        <div>
+          <p className="font-mono-sticker text-[11px] uppercase tracking-widest text-ink-soft font-medium">
+            {label}
+          </p>
+          <p className="font-display text-2xl sm:text-3xl text-coral tracking-wider tabular-nums leading-none mt-1">
+            --:--:--
+          </p>
+        </div>
+        <span className="badge badge-pitch">Autosaves</span>
+      </div>
+    );
+  }
 
   if (remaining <= 0) {
     return (
