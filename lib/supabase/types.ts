@@ -177,3 +177,19 @@ export interface LeagueStandingsRow {
   tournament_points: number;
   prop_points: number;
 }
+
+export interface BanterMessage {
+  id: string;
+  league_id: string;
+  user_id: string;
+  body: string;
+  created_at: string;
+}
+
+export interface BanterReply {
+  id: string;
+  message_id: string;
+  user_id: string;
+  body: string;
+  created_at: string;
+}

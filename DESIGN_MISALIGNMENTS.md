@@ -10,20 +10,27 @@ real, and a one-line rationale for why it didn't land in the foundation PR.
 
 ## 1. Banter / chat
 
-**Design**: `project/sticker-b.jsx:StickerBanter` + `project/mobile-b.jsx`. Sticker
-composer ("Talk your shit…"), 180-char counter that flips coral on overflow, quick-insert
-emoji chips (🔥 😭 💀 🤡), threaded replies with stacked avatars + collapsible threads,
-inline reply composer. Lives on the league sidebar (desktop) and league screen (mobile).
+**Status (2026-05-25)**: shipped in issue #35 — composer with 180-char counter +
+emoji chips, threaded replies (collapsed by default), Supabase Realtime live
+updates via `league:<id>:banter`, optimistic insert with rollback. Migration
+`0011_banter.sql`, server actions in `lib/banter/actions.ts`, components in
+`components/banter/`. League home restructured to 2-column desktop layout
+(`lg:grid-cols-[1.8fr_1fr]`) with banter in the right sidebar.
 
-**Needed to ship**:
-- New tables: `banter_messages(league_id, user_id, body, created_at)` and
-  `banter_replies(message_id, user_id, body, created_at)`.
-- RLS: members of the league can read + insert; only the author can delete their own.
-- Server actions in `lib/banter/actions.ts` for post + reply + delete + react.
-- Realtime subscription on the league channel for live updates.
-- Optimistic insert with rollback (mirror `MatchPickCard` pattern).
-
-**Why deferred**: net-new DB schema + RLS work, sits outside a visual refresh.
+**Still deferred from the design**:
+- **Avatar circles / stacked-avatar reply preview** — the design renders emoji
+  avatars (⚡ 🦊 🐺 🐝) and a stacked-avatar reply-count preview. v1 ships
+  username-only display (matches the rest of the app, which has no Avatar
+  component yet). Needs either a `profile_pic_url` column + Supabase Storage
+  bucket + upload UI, or a minimal initials-circle component reused across
+  leaderboard / banter / member list.
+- **Reactions on banter posts** — the design's emoji chips are for *composing*;
+  reacting to other users' posts (different from §2 pick-reactions) isn't
+  scoped. Would reuse the `pick_reactions` table shape with a `target_kind` =
+  `banter_message` / `banter_reply`.
+- **Edit support** — design shows post + delete but no edit affordance; shipped
+  immutable in v1.
+- **"Load older" pagination** beyond the first 50 messages.
 
 ## 2. Pick reactions (🔥 💩 😱 👍)
 
