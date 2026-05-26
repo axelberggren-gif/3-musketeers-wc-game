@@ -7,7 +7,7 @@ export default async function AdminMatchesPage() {
   const { data: matches } = await supabase
     .from("matches")
     .select(
-      "id, kickoff_at, stage, group_letter, status, home_score, away_score, home:home_team_id(name, code), away:away_team_id(name, code)",
+      "id, kickoff_at, stage, group_letter, status, home_score, away_score, home:teams!home_team_id(name, code), away:teams!away_team_id(name, code)",
     )
     .order("kickoff_at");
 
@@ -31,8 +31,8 @@ export default async function AdminMatchesPage() {
           </thead>
           <tbody className="divide-y divide-[var(--border)]">
             {(matches ?? []).map((m) => {
-              const home = Array.isArray(m.home) ? m.home[0] : m.home;
-              const away = Array.isArray(m.away) ? m.away[0] : m.away;
+              const home = m.home;
+              const away = m.away;
               return (
                 <tr key={m.id}>
                   <td className="px-4 py-2 font-mono text-xs">{isoToLocal(m.kickoff_at)}</td>

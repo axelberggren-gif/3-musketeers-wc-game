@@ -1,6 +1,5 @@
 import * as Sentry from "@sentry/nextjs";
 import { supabaseService } from "@/lib/supabase/server";
-import { unwrapRelation } from "@/lib/utils";
 
 export interface ValidatedInvite {
   invite_id: string;
@@ -20,9 +19,7 @@ export async function validateInviteToken(token: string): Promise<ValidatedInvit
   if (!data || data.revoked) return null;
   if (data.expires_at && new Date(data.expires_at) < new Date()) return null;
   if (data.max_uses && data.uses_count >= data.max_uses) return null;
-  const league = unwrapRelation(
-    data.leagues as { name: string; slug: string } | { name: string; slug: string }[] | null,
-  );
+  const league = data.leagues as { name: string; slug: string } | null;
   if (!league) return null;
   return {
     invite_id: data.id,

@@ -1,4 +1,5 @@
 import { supabaseService } from "@/lib/supabase/server";
+import type { Json } from "@/lib/supabase/types";
 import {
   FootballDataClient,
   deriveBracketSlot,
@@ -30,7 +31,7 @@ async function log(
     endpoint,
     status_code: status_code ?? null,
     message,
-    payload: (payload as object) ?? null,
+    payload: (payload ?? null) as Json | null,
   });
 }
 

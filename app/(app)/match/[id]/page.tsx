@@ -6,7 +6,7 @@ import { PickReactionStrip } from "@/components/social/PickReactionStrip";
 import { matchIsLocked } from "@/lib/scoring/lock";
 import { loadPickReactions } from "@/lib/predictions/reactions";
 import { aggregateKey } from "@/lib/predictions/reactions-shared";
-import { isoToLocal, unwrapRelation } from "@/lib/utils";
+import { isoToLocal } from "@/lib/utils";
 import type { Pick1X2 } from "@/lib/supabase/types";
 
 type MatchTeamRel = { id: string; name: string; code: string; crest_url: string | null };
@@ -27,14 +27,14 @@ export default async function MatchPage({
   const { data: match } = await supabase
     .from("matches")
     .select(
-      "id, kickoff_at, stage, group_letter, status, home_score, away_score, winner, home:home_team_id(id, name, code, crest_url), away:away_team_id(id, name, code, crest_url)",
+      "id, kickoff_at, stage, group_letter, status, home_score, away_score, winner, home:teams!home_team_id(id, name, code, crest_url), away:teams!away_team_id(id, name, code, crest_url)",
     )
     .eq("id", id)
     .maybeSingle();
   if (!match) notFound();
 
-  const home = unwrapRelation(match.home as MatchTeamRel | MatchTeamRel[] | null);
-  const away = unwrapRelation(match.away as MatchTeamRel | MatchTeamRel[] | null);
+  const home = match.home as MatchTeamRel | null;
+  const away = match.away as MatchTeamRel | null;
 
   const locked = matchIsLocked(match.kickoff_at);
 
@@ -72,7 +72,7 @@ export default async function MatchPage({
     : new Map();
 
   const finished = match.status === "FINISHED";
-  const live = match.status === "IN_PLAY" || match.status === "PAUSED";
+  const live = match.status === "LIVE";
 
   return (
     <main className="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-10 flex flex-col gap-6">
@@ -141,7 +141,7 @@ export default async function MatchPage({
           </div>
           <ul className="flex flex-col gap-2">
             {friendsPicks.map((row, i) => {
-              const profile = unwrapRelation(row.profile as ProfileRel | ProfileRel[] | null);
+              const profile = row.profile as ProfileRel | null;
               const pick = row.pick as Pick1X2;
               const pickId = row.id as string;
               const agg = reactionMap.get(aggregateKey("match", pickId));

@@ -1,7 +1,6 @@
 import * as Sentry from "@sentry/nextjs";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { computeLockState } from "@/lib/scoring/lock";
-import { unwrapRelation } from "@/lib/utils";
 import { GroupStageList, type GroupStageMatch } from "@/components/predict/GroupStageList";
 import { TournamentForm } from "@/components/predict/TournamentForm";
 import { GroupWinnerPicker } from "@/components/predict/GroupWinnerPicker";
@@ -35,7 +34,7 @@ export default async function Round1Page() {
     supabase
       .from("matches")
       .select(
-        "id, kickoff_at, group_letter, stage, home:home_team_id(id, name, short_name, code, crest_url), away:away_team_id(id, name, short_name, code, crest_url)",
+        "id, kickoff_at, group_letter, stage, home:teams!home_team_id(id, name, short_name, code, crest_url), away:teams!away_team_id(id, name, short_name, code, crest_url)",
       )
       .eq("stage", "GROUP")
       .order("kickoff_at", { ascending: true }),
@@ -156,7 +155,7 @@ export default async function Round1Page() {
   const players = (playersRes.data ?? []).map((p) => ({
     id: p.id,
     name: p.name,
-    team_name: unwrapRelation(p.team as { name: string } | { name: string }[] | null)?.name ?? null,
+    team_name: (p.team as { name: string } | null)?.name ?? null,
   }));
   const lastSync = lastSyncRes.data as
     | { ran_at: string; endpoint: string; status_code: number | null; message: string | null }

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { supabaseServer } from "@/lib/supabase/server";
 import { CountryFlag } from "@/components/CountryFlag";
-import { isoToLocal, unwrapRelation } from "@/lib/utils";
+import { isoToLocal } from "@/lib/utils";
 import { BanterFeed } from "@/components/banter/BanterFeed";
 import type { BanterMessage, BanterReply } from "@/lib/supabase/types";
 import type { ProfileLite } from "@/components/banter/BanterMessage";
@@ -36,7 +36,7 @@ export default async function LeagueHomePage({
     supabase
       .from("matches")
       .select(
-        "id, kickoff_at, stage, group_letter, status, home:home_team_id(name, code, crest_url), away:away_team_id(name, code, crest_url)",
+        "id, kickoff_at, stage, group_letter, status, home:teams!home_team_id(name, code, crest_url), away:teams!away_team_id(name, code, crest_url)",
       )
       .gt("kickoff_at", new Date().toISOString())
       .order("kickoff_at", { ascending: true })
@@ -44,7 +44,7 @@ export default async function LeagueHomePage({
     supabase
       .from("matches")
       .select(
-        "id, kickoff_at, stage, group_letter, status, home_score, away_score, home:home_team_id(name, code, crest_url), away:away_team_id(name, code, crest_url)",
+        "id, kickoff_at, stage, group_letter, status, home_score, away_score, home:teams!home_team_id(name, code, crest_url), away:teams!away_team_id(name, code, crest_url)",
       )
       .eq("status", "FINISHED")
       .order("kickoff_at", { ascending: false })
@@ -82,10 +82,9 @@ export default async function LeagueHomePage({
   const profilesById: Record<string, ProfileLite> = {};
   for (const row of (membersRes.data ?? []) as Array<{
     user_id: string;
-    profile: ProfileLite | ProfileLite[] | null;
+    profile: ProfileLite | null;
   }>) {
-    const p = unwrapRelation(row.profile);
-    if (p) profilesById[row.user_id] = p;
+    if (row.profile) profilesById[row.user_id] = row.profile;
   }
 
   return (
@@ -223,15 +222,15 @@ type MatchRowData = {
   group_letter: string | null;
   stage: string;
   status: string;
-  home: MatchTeam | MatchTeam[];
-  away: MatchTeam | MatchTeam[];
+  home: MatchTeam;
+  away: MatchTeam;
   home_score?: number | null;
   away_score?: number | null;
 };
 
 function MatchRow({ match, showScore }: { match: MatchRowData; showScore?: boolean }) {
-  const home = unwrapRelation(match.home);
-  const away = unwrapRelation(match.away);
+  const home = match.home;
+  const away = match.away;
   return (
     <li
       className="rounded-lg border-2 border-ink bg-paper-2 px-3 py-2 flex items-center gap-2"
