@@ -48,32 +48,37 @@ the kinds but no UI surface mints them), Supabase Realtime broadcast for live
 counts (still revalidate-on-tap), and orphan cleanup when a host pick is
 deleted.
 
-## 3. Pulse stats (League / Tournament)
+## 3. Pulse stats (League / Tournament) — **Shipped 2026-05-26 (#37)**
 
-**Design**: `project/sticker-b.jsx:StickerPulse` + `project/mobile-b.jsx`. Below the
-leaderboard: League/Tournament toggle, 4 stat tiles, then highlight rows (most contested
-match, group consensus, wildcard pick).
+Pulse panel ships in #37. `lib/stats/pulse.ts` exports `loadLeaguePulse(leagueId,
+userId)` + `loadTournamentPulse(leagueId)`; `components/stats/PulseTabs.tsx`
+renders the toggle + 4 tiles + 3 highlights per mode. Mounted under
+`<LeaderboardLive>` in `app/(app)/leagues/[slug]/leaderboard/page.tsx` with both
+pulses parallel-loaded server-side via `Promise.all`. League mode tiles =
+leader's gap / hottest current streak / viewer's bold picks / viewer's perfect
+MDs; highlights = most-contested match / group consensus / wildcard pick.
+Tournament mode tiles = avg goals per finished match / upsets at ≥5 rank delta /
+total goals / red cards; highlights = most-picked champion / top golden boot /
+Cinderella vote.
 
-**League stats** (need aggregation queries):
-- Leader's gap (top1 - top2 points)
-- Hottest streak (longest current correct streak)
-- Bold picks (count of picks with <25% league agreement)
-- Perfect MDs (matchdays where the user got 100%)
-- Most contested match (highest variance in picks)
-- Group consensus (group with most agreement on winner)
-- Wildcard pick (least-picked correct pick)
+**Open-question resolutions (v1)**:
+- *Matchday* = UTC calendar date of `matches.kickoff_at`.
+- *Upset threshold* = rank delta ≥ 5; DRAW never counts.
+- *Cinderella* reads `tournament_predictions.dark_horse_team_id`.
+- *Cohort* for both modes' highlights = current league's `league_members`. The
+  match-fact tournament tiles read the real tournament (no cohort needed).
 
-**Tournament stats**:
-- Avg goals per finished match
-- Upsets so far (matches where favourite lost, by FIFA rank delta)
-- Total goals scored
-- Red cards count (from `player_card_log`)
-- Most-picked champion (top of `tournament_predictions.winner_team_id` aggregation)
-- Top golden boot pick
-- Cinderella vote (most-picked dark horse)
-
-**Why deferred**: each tile is one query but the set is large; should ship as its own PR
-with a `lib/stats/pulse.ts` module.
+**Still deferred**:
+- *Tournament-wide cohort* — `loadTournamentPulse()` was narrowed to league-scoped
+  highlights to stay inside RLS. Cross-league aggregation needs a SECURITY
+  DEFINER aggregator or `supabaseService()`.
+- *`unstable_cache` + finished-match invalidation* — queries are small for v1;
+  rewire if/when leagues grow.
+- *`match_pick_distribution` view* — distribution is aggregated in TS per the
+  issue's "no SQL window needed for league-sized cohorts" hint.
+- *Realtime refresh on `point_awards` insert* — Pulse intentionally does NOT
+  subscribe to the same realtime channel `LeaderboardLive` uses; tile thrash on
+  every scoring event would be noisy. Next navigation re-runs the loaders.
 
 ## 4. Pick personality (Profile)
 

@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { supabaseServer } from "@/lib/supabase/server";
 import type { LeagueStandingsRow } from "@/lib/supabase/types";
+import { loadLeaguePulse, loadTournamentPulse } from "@/lib/stats/pulse";
+import { PulseTabs } from "@/components/stats/PulseTabs";
 import { LeaderboardLive } from "./LeaderboardLive";
 
 export default async function LeaderboardPage({
@@ -26,6 +28,13 @@ export default async function LeaderboardPage({
     .select("*")
     .eq("league_id", league.id)
     .order("total_points", { ascending: false });
+
+  const [leaguePulse, tournamentPulse] = user
+    ? await Promise.all([
+        loadLeaguePulse(league.id, user.id),
+        loadTournamentPulse(league.id),
+      ])
+    : [null, null];
 
   return (
     <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-10 flex flex-col gap-6">
@@ -55,6 +64,10 @@ export default async function LeaderboardPage({
         initialRows={(rows ?? []) as LeagueStandingsRow[]}
         currentUserId={user?.id ?? null}
       />
+
+      {leaguePulse && tournamentPulse && (
+        <PulseTabs league={leaguePulse} tournament={tournamentPulse} />
+      )}
     </main>
   );
 }
