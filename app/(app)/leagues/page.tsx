@@ -33,13 +33,14 @@ export default async function LeaguesPage() {
   if (leagues.length) {
     const { data: countRows } = await supabase
       .from("league_members")
-      .select("league_id")
+      .select("league_id, member_count:user_id.count()")
       .in(
         "league_id",
         leagues.map((m) => m.league.id),
       );
-    for (const row of countRows ?? []) {
-      counts[row.league_id as string] = (counts[row.league_id as string] ?? 0) + 1;
+    const rows = (countRows ?? []) as unknown as { league_id: string; member_count: number }[];
+    for (const row of rows) {
+      counts[row.league_id] = Number(row.member_count);
     }
   }
 

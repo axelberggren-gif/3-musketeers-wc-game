@@ -31,9 +31,11 @@ export async function createLeague(_prev: CreateLeagueState, formData: FormData)
   const service = supabaseService();
   let slug = slugify(name);
   if (!slug) slug = randomToken(8);
-  for (let i = 0; i < 8; i++) {
-    const { data: existing } = await service.from("leagues").select("id").eq("slug", slug).maybeSingle();
-    if (!existing) break;
+  const { data: existing } = await service.from("leagues").select("id").eq("slug", slug).maybeSingle();
+  if (existing) {
+    // randomToken(4) over a 32-char alphabet (~1M combos) makes a second
+    // collision astronomically rare for a private friends league — skip
+    // the wasted re-lookup.
     slug = `${slugify(name)}-${randomToken(4)}`;
   }
 
