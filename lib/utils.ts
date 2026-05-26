@@ -25,11 +25,3 @@ export function randomToken(length = 16) {
   for (const byte of bytes) out += alphabet[byte % alphabet.length];
   return out;
 }
-
-// PostgREST returns embedded foreign-key relations as either a single object or
-// a one-element array depending on how it infers cardinality. Until db:types is
-// regenerated against a live schema, every call site has to handle both.
-export function unwrapRelation<T>(r: T | T[] | null | undefined): T | null {
-  if (Array.isArray(r)) return r[0] ?? null;
-  return r ?? null;
-}

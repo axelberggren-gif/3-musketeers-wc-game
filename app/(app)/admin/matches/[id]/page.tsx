@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { supabaseServer } from "@/lib/supabase/server";
-import { unwrapRelation } from "@/lib/utils";
 import { OverrideForm } from "./OverrideForm";
 
 type TeamName = { name: string };
@@ -16,13 +15,13 @@ export default async function AdminMatchEditPage({
   const { data: match } = await supabase
     .from("matches")
     .select(
-      "id, status, home_score, away_score, home:home_team_id(name), away:away_team_id(name)",
+      "id, status, home_score, away_score, home:teams!home_team_id(name), away:teams!away_team_id(name)",
     )
     .eq("id", id)
     .maybeSingle();
   if (!match) notFound();
-  const home = unwrapRelation(match.home as TeamName | TeamName[] | null);
-  const away = unwrapRelation(match.away as TeamName | TeamName[] | null);
+  const home = match.home as TeamName | null;
+  const away = match.away as TeamName | null;
 
   return (
     <div className="flex flex-col gap-4 max-w-md">

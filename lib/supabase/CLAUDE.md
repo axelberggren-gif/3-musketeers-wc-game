@@ -41,6 +41,19 @@ that touches Supabase imports from here.
   correct (the middleware does the actual writing).
 - Environment variables required: `NEXT_PUBLIC_SUPABASE_URL`,
   `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (server-only).
+- Embedded relations on `matches` (which has two FKs to `teams` — `home_team_id` +
+  `away_team_id`) MUST use the column-name hint syntax `teams!home_team_id(...)`
+  / `teams!away_team_id(...)`. The legacy `home:home_team_id(...)` form is
+  PostgREST-valid but supabase-js's typed select parser rejects it with
+  `SelectQueryError<"Could not embed because more than one relationship was
+  found...">`. Nested relations through `match_predictions.match_id → matches`
+  also need the hint (`match:matches!match_id(...)`).
+- `LeagueStandingsRow` is the **non-null** business shape; `Tables<"league_standings">`
+  from the generated types declares every column nullable (because the view uses
+  `coalesce(sum(...), 0)::int`, which the CLI can't introspect). Cast at the
+  boundary: `(rows ?? []) as LeagueStandingsRow[]`. Same pattern in the realtime
+  refetch inside `LeaderboardLive`.
 
 ## Recent changes
 <!-- Newest first. Keep last 10. One line per entry. -->
+- 2026-05-26: `types.ts` regenerated in supabase-CLI format — full `Database` namespace covering all 23 tables + `league_standings` view + 18 RPC functions + 6 enums, with `Tables<>` / `TablesInsert<>` / `TablesUpdate<>` / `Enums<>` helper aliases. Legacy interface names (`Pick1X2`, `Tournament`, `BanterMessage`, `BanterReply`, `LeagueStandingsRow`) kept as type aliases at the bottom for backward compat. `<Database>` now threaded through `supabaseBrowser()`, `supabaseServer()`, `supabaseService()`, and `updateSession()` so queries are fully type-safe. Required bumping `@supabase/ssr` from `^0.5.1` to `^0.10.3` — earlier versions used a 3-generic `SupabaseClient` signature incompatible with `@supabase/supabase-js@2.106`'s 5-generic one (Schema fell back to `never`, killing all query inference). `unwrapRelation()` helper deleted from `lib/utils.ts` and dropped from all 10 call sites — embedded single-FK relations are now correctly typed as `T | null` via the new generic. Closes #14.
