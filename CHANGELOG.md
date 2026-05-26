@@ -24,6 +24,7 @@ After committing your change, run `git commit --amend --no-edit` once to backfil
 - 2026-05-19 (`pending`) `unwrapRelation` helper centralises the PostgREST single-vs-array embedded-relation cast — @?
 
 ### Changed
+- 2026-05-25 (`pending`) `/predict` group chips became an interactive filter. New `components/predict/GroupStageList.tsx` client wraps the 1X2 match list with an "All groups" reset pill + one pill per group letter (A..L); clicking toggles a local `useState<string | null>` filter (re-tap clears, tap on a different group switches), and the date-grouped match layout re-renders against the filtered subset. Active pill uses `bg-gold`; the existing "complete" `bg-pitch` ✓ state is preserved for inactive pills. Server page passes `picksByMatch` / `groupCoverage` as plain `Record<>` objects (previously `Map`) so RSC → client serialisation works — @ek
 - 2026-05-19 (`pending`) `syncFixtures` prefetches teams (eliminating ~128 round-trips/run) and invokes `score_tournament` once the Final lands — @?
 - 2026-05-19 (`pending`) `overrideMatchResult` re-scores the tournament after an admin override and validates score inputs server-side — @?
 - 2026-05-19 (`pending`) `loadProfileStats` gates accuracy on the viewer being the profile owner — @?
