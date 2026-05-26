@@ -1,4 +1,5 @@
 import Link from "next/link";
+import * as Sentry from "@sentry/nextjs";
 import { supabaseServer } from "@/lib/supabase/server";
 import { CreateLeagueForm } from "./CreateLeagueForm";
 
@@ -28,18 +29,36 @@ export default async function LeaguesPage() {
     }))
     .filter((m): m is { role: "owner" | "member"; league: LeagueRow } => m.league !== null);
 
+  // Member counts: fetch league_id for every member row and count client-side.
+  // We tried `select("league_id, member_count:user_id.count()")` (PostgREST
+  // aggregate) in PR #56 but Supabase has `db-aggregates-enabled=false` by
+  // default — the aggregate request 400s, supabase-js fills `error`, data
+  // comes back null, and every card fell back to the `?? 1` render default.
+  // Per-row fetch is fine for a friends-only league size — leagues are tiny.
   const counts: Record<string, number> = {};
   if (leagues.length) {
-    const { data: countRows } = await supabase
+    const { data: countRows, error: countError } = await supabase
       .from("league_members")
-      .select("league_id, member_count:user_id.count()")
+      .select("league_id")
       .in(
         "league_id",
         leagues.map((m) => m.league.id),
       );
-    const rows = (countRows ?? []) as unknown as { league_id: string; member_count: number }[];
-    for (const row of rows) {
-      counts[row.league_id] = Number(row.member_count);
+    if (countError) {
+      Sentry.captureMessage("leagues: member count query failed", {
+        level: "error",
+        tags: { area: "leagues", feature: "member_count" },
+        extra: {
+          user_id: user.id,
+          pg_code: countError.code,
+          pg_message: countError.message,
+          pg_details: countError.details,
+          pg_hint: countError.hint,
+        },
+      });
+    }
+    for (const row of countRows ?? []) {
+      counts[row.league_id] = (counts[row.league_id] ?? 0) + 1;
     }
   }
 
