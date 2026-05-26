@@ -41,8 +41,8 @@ in `app/api/cron/` and from admin actions.
   `refresh_league_standings` after upserting matches. Those functions live in
   migrations 0002, 0004 and 0005 — keep them in sync.
 - `syncFixtures()` derives `bracket_slot` per knockout match by sorting matches
-  within each stage by `utcDate` (R16-1..8 / QF-A..D / SF-A..B / F). Without
-  this, `score_bracket()` would never join.
+  within each stage by `utcDate` (R32-1..16 / R16-1..8 / QF-A..D / SF-A..B / F).
+  Without this, `score_bracket()` would never join.
 - `syncFixtures()` also drains up to **5 per-match detail fetches** per run via
   `drainPendingMatchDetails()`: any FINISHED match with `details_synced_at IS NULL`
   is hit on `/matches/{id}` to pick up goals + bookings, then marked. The 5-per-run
@@ -53,6 +53,7 @@ in `app/api/cron/` and from admin actions.
 
 ## Recent changes
 <!-- Newest first. Keep last 10. One line per entry. -->
+- 2026-05-26: `FdMatch.stage` union gains `"LAST_32"` and `mapStage()` translates it to our new `R32` local stage (added in migration 0013). `deriveBracketSlot()` now mints `R32-1..R32-16` for first-knockout-round matches by kickoff order. `syncFixtures()` already calls `deriveBracketSlot()` generically so it picks up R32 without further edits. If football-data uses a different label than `LAST_32` for actual WC 2026 data, only this mapping needs updating — the DB enum value `R32` is the canonical local stage.
 - 2026-05-24: Fixed `group_letter` parser — `m.group` is `"GROUP_A"`..`"GROUP_L"` in v4 (matching the `stage` enum convention), not the legacy `"Group A"` form. The old `replace("Group ", "").slice(0, 1)` was a no-op and returned `"G"` for every group. New `parseGroupLetter()` helper accepts both. `syncFixtures` now calls `backfill_team_group_letters` RPC (migration 0010) after the match upsert loop so `teams.group_letter` (which nothing else wrote) self-heals from match data.
 - 2026-05-22: `syncFixtures` drains up to 5 per-match detail fetches per run into `player_goal_log` / new `player_card_log` (gated on `matches.details_synced_at`); calls `settle_group_stage_props` RPC for progressive group-winner / first-eliminated scoring. `FdBooking` interface + `FdMatch.bookings?` added.
 - 2026-05-19: `syncFixtures` prefetches teams (one query instead of ~128), derives `bracket_slot` deterministically per knockout stage, and invokes `score_tournament` when the Final lands.

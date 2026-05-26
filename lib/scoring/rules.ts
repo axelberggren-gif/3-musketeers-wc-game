@@ -4,6 +4,9 @@
 export const POINTS = {
   match1x2: 3,
   bracket: {
+    // R32 is the first knockout round in WC 2026 (32 teams: 12 group winners +
+    // 12 runners-up + 8 best 3rd-place). Less prestigious than R16, so 1 pt.
+    R32: 1,
     R16: 2,
     QF: 4,
     SF: 6,
@@ -28,6 +31,7 @@ export const POINTS = {
 export type BracketStage = keyof typeof POINTS.bracket;
 
 export const BRACKET_STAGE_BY_SLOT_PREFIX: Record<string, BracketStage> = {
+  R32: "R32",
   R16: "R16",
   QF: "QF",
   SF: "SF",

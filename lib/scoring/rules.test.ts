@@ -9,6 +9,7 @@ describe("POINTS constants", () => {
     expect(POINTS.match1x2).toBe(3);
   });
   it("bracket stage values", () => {
+    expect(POINTS.bracket.R32).toBe(1);
     expect(POINTS.bracket.R16).toBe(2);
     expect(POINTS.bracket.QF).toBe(4);
     expect(POINTS.bracket.SF).toBe(6);
@@ -34,6 +35,8 @@ describe("POINTS constants", () => {
 
 describe("bracketPointsForSlot", () => {
   it("handles indexed slots (STAGE-N)", () => {
+    expect(bracketPointsForSlot("R32-1")).toBe(1);
+    expect(bracketPointsForSlot("R32-16")).toBe(1);
     expect(bracketPointsForSlot("R16-1")).toBe(2);
     expect(bracketPointsForSlot("R16-8")).toBe(2);
     expect(bracketPointsForSlot("QF-A")).toBe(4);

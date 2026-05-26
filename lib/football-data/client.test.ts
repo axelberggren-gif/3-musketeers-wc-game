@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import { deriveBracketSlot, mapStage, mapStatus, mapWinner } from "./client";
 
 describe("deriveBracketSlot", () => {
+  it("labels R32 slots 1..16 by index", () => {
+    expect(deriveBracketSlot("R32", 0)).toBe("R32-1");
+    expect(deriveBracketSlot("R32", 15)).toBe("R32-16");
+  });
   it("labels R16 slots 1..8 by index", () => {
     expect(deriveBracketSlot("R16", 0)).toBe("R16-1");
     expect(deriveBracketSlot("R16", 7)).toBe("R16-8");
@@ -24,6 +28,7 @@ describe("deriveBracketSlot", () => {
 describe("mapStage", () => {
   it("translates football-data stage enum", () => {
     expect(mapStage("GROUP_STAGE")).toBe("GROUP");
+    expect(mapStage("LAST_32")).toBe("R32");
     expect(mapStage("LAST_16")).toBe("R16");
     expect(mapStage("QUARTER_FINALS")).toBe("QF");
     expect(mapStage("SEMI_FINALS")).toBe("SF");
