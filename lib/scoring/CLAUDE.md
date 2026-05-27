@@ -52,5 +52,6 @@ Actual point-awarding writes happen in SQL functions (see `supabase/migrations/0
 
 ## Recent changes
 <!-- Newest first. Keep last 10. One line per entry. -->
+- 2026-05-26: Added `POINTS.bracket.R32 = 1` for the new WC 2026 Round of 32 (first knockout round, less prestigious than R16 = 2). Mirrored in `supabase/migrations/0013_add_r32_stage.sql` (`points_bracket_slot` now matches `R32-%` → 1). `BRACKET_STAGE_BY_SLOT_PREFIX` gets an `R32: "R32"` entry so `bracketPointsForSlot("R32-1")` returns 1. UI and auto-advancement land in follow-up PRs; this PR is the schema/scoring foundation only.
 - 2026-05-22: Added `fifa-rankings.ts` (canonical TS source for the 48 WC 2026 ranks) + test. `POINTS.tournament.darkHorse` removed in favour of rank-based scoring (teams.fifa_ranking). New `POINTS.tournament.{totalGoalsBase, highestMatchBase, troublemaker, groupWinner, firstEliminated}` mirror their SQL twins in migration 0005.
 - 2026-05-19: Added vitest unit tests (`rules.test.ts`, `lock.test.ts`) so a points-sync drift between `rules.ts` and SQL surfaces in CI.
