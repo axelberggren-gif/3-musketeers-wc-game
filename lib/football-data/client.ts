@@ -9,6 +9,7 @@ export interface FdMatch {
   status: "SCHEDULED" | "TIMED" | "IN_PLAY" | "PAUSED" | "FINISHED" | "POSTPONED" | "SUSPENDED" | "CANCELLED";
   stage:
     | "GROUP_STAGE"
+    | "LAST_32"
     | "LAST_16"
     | "QUARTER_FINALS"
     | "SEMI_FINALS"
@@ -98,10 +99,16 @@ export class FootballDataClient {
 }
 
 // Map football-data stage → our stage enum
+// WC 2026 introduces a Round of 32 as the first knockout round; football-data
+// v4 exposes it as `LAST_32`. If they end up using a different label for the
+// actual tournament data, the migration 0013 enum value `R32` stays correct —
+// only this mapping needs adjusting.
 export function mapStage(stage: FdMatch["stage"]) {
   switch (stage) {
     case "GROUP_STAGE":
       return "GROUP" as const;
+    case "LAST_32":
+      return "R32" as const;
     case "LAST_16":
       return "R16" as const;
     case "QUARTER_FINALS":
@@ -118,11 +125,13 @@ export function mapStage(stage: FdMatch["stage"]) {
 export type LocalStage = ReturnType<typeof mapStage>;
 
 // Slot labels mirror components/predict/BracketBuilder.tsx and the score_bracket
-// SQL function: R16-1..8, QF-A..D, SF-A..B, F. Index is the match's order within
-// its stage by kickoff time — the deterministic schedule means R16-1 is always
-// the first R16 match.
+// SQL function: R32-1..16, R16-1..8, QF-A..D, SF-A..B, F. Index is the match's
+// order within its stage by kickoff time — the deterministic schedule means
+// R32-1 is always the first R32 match.
 export function deriveBracketSlot(stage: LocalStage, indexInStage: number): string | null {
   switch (stage) {
+    case "R32":
+      return `R32-${indexInStage + 1}`;
     case "R16":
       return `R16-${indexInStage + 1}`;
     case "QF":
