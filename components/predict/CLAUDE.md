@@ -22,6 +22,12 @@ server pages.
   pattern, used for the total-goals / highest-match-goals tournament guesses.
 - `GroupWinnerPicker.tsx` — 12 `TeamSelect`s, one per group (A..L), filtered to that
   group's teams. Each picks the user's predicted group winner.
+- `PredictedAdvancers.tsx` — Read-only display of the 32 teams the user's 1X2 picks
+  imply will advance to the knockouts (12 winners + 12 runners-up + 8 best 3rds).
+  Pure presentational server component; the derivation lives in
+  `lib/predictions/advancers.ts`. Renders an empty state until the user makes their
+  first pick. Surfaces tiebreaker badges (`H2H` / `FIFA` / `Tied`) when standings
+  weren't decidable on points alone.
 - `TournamentForm.tsx` — Admin form for tournament key dates.
 
 ## Conventions
@@ -52,6 +58,7 @@ server pages.
 
 ## Recent changes
 <!-- Newest first. Keep last 10. One line per entry. -->
+- 2026-05-27: New `PredictedAdvancers.tsx` server component renders the read-only "Predicted advancers" section on `/predict` (12 group winners + 12 runners-up + 8 best 3rds derived from the user's 1X2 picks). Pure presentational; derivation lives in `lib/predictions/advancers.ts`. Tiebreaker chips (H2H / FIFA / Tied) surface when standings weren't decidable on points alone. Refreshes on Server Component re-render only — `setMatchPick` already revalidates `/predict`.
 - 2026-05-25: `CountdownBanner` no longer triggers React hydration mismatches. The lazy `useState` initializer used to call `Date.now()` during SSR, but SSR and hydration run a few hundred ms apart so the formatted string differed and React tore the DOM. `remaining` now starts as `null` (placeholder DOM `--:--:--` on both server and client first render); a `requestAnimationFrame` inside `useEffect` schedules the first real tick, then a 1 s interval drives the countdown. Refs Sentry `JAVASCRIPT-NEXTJS-5` / #47.
 - 2026-05-22: Sticker Stadium re-skin. `MatchPickCard` rebuilt with sticker tiles (paper-2 bg, ink shadow, gold selection state) and a "✓ Picked / Pick! / Locked" status pill. Tile tap now toggles (re-tap clears the pick). `BracketBuilder` slots use a dashed-border "?" empty state, gold shadow on the Champion slot when filled, sticker stage headers. `CountdownBanner` rebuilt as a coral-shadow sticker pill with mono `LOCKS IN` label + Archivo Black coral countdown. `TeamSelect` / `PlayerSelect` / `NumberInput` / `GroupWinnerPicker` / `TournamentForm` inherit the new `.input` + `.label` chrome with no behaviour changes. Bracket progressive-reveal (R16 pre-set, QF/SF/F derive from upstream, downstream invalidation) is **not** implemented — tracked in `/DESIGN_MISALIGNMENTS.md` §7.
 - 2026-05-22: Added `NumberInput.tsx` and `GroupWinnerPicker.tsx` for the new tournament-wide props (total goals, highest match, group winners). `TeamSelect` gained `showRanking` for rank-based dark-horse display. `TournamentForm` extended with first-eliminated, total-goals, highest-match, troublemaker fields plus the rank-aware dark-horse label.

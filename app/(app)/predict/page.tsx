@@ -5,9 +5,11 @@ import { unwrapRelation } from "@/lib/utils";
 import { MatchPickCard, type MatchPickRow } from "@/components/predict/MatchPickCard";
 import { TournamentForm } from "@/components/predict/TournamentForm";
 import { GroupWinnerPicker } from "@/components/predict/GroupWinnerPicker";
+import { PredictedAdvancers } from "@/components/predict/PredictedAdvancers";
 import type { TeamOption } from "@/components/predict/TeamSelect";
 import { CountdownBanner } from "@/components/predict/CountdownBanner";
 import type { Pick1X2 } from "@/lib/supabase/types";
+import { deriveAdvancers } from "@/lib/predictions/advancers";
 
 const PROP_DEFS = [{ key: "first_goal_final", label: "First goal in the Final" }];
 
@@ -188,6 +190,35 @@ export default async function Round1Page() {
   const totalPicked = picksByMatch.size;
   const totalToGo = matches.length - totalPicked;
 
+  // Derive "predicted advancers" from the user's 1X2 picks. Pure read-only —
+  // computes who the user implicitly thinks will advance (12 winners + 12
+  // runners-up + 8 best 3rd-places). Scoring for this sub-game lands in a
+  // follow-up PR; here we only surface the derivation to the user.
+  const advancersMatchInputs = matches.flatMap((m) => {
+    if (!m.group_letter || !m.home?.id || !m.away?.id) return [];
+    return [
+      {
+        id: m.id,
+        home_team_id: m.home.id,
+        away_team_id: m.away.id,
+        group_letter: m.group_letter,
+      },
+    ];
+  });
+  const advancerPicks = (picksRes.data ?? []).map((r) => ({
+    match_id: r.match_id as string,
+    pick: r.pick as "1" | "X" | "2",
+  }));
+  const advancers = deriveAdvancers(
+    advancersMatchInputs,
+    advancerPicks,
+    teams.map((t) => ({ id: t.id, fifa_ranking: t.fifa_ranking ?? null })),
+  );
+  const teamNamesById = new Map<string, { name: string; code: string | null }>();
+  for (const t of teamsRes.data ?? []) {
+    teamNamesById.set(t.id, { name: t.name, code: t.code });
+  }
+
   return (
     <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-10 flex flex-col gap-6">
       <header className="flex flex-col gap-3">
@@ -252,6 +283,17 @@ export default async function Round1Page() {
           initial={groupPicks}
           locked={locks.round1Locked}
         />
+      </section>
+
+      <section className="card flex flex-col gap-4">
+        <h2 className="font-display uppercase tracking-wide text-lg">
+          Predicted advancers
+        </h2>
+        <p className="text-sm text-ink-soft">
+          Derived from your 1X2 picks below — 12 group winners + 12 runners-up + 8 best
+          3rd-places (32 teams). Updates when you save or revisit the page.
+        </p>
+        <PredictedAdvancers advancers={advancers} teamNamesById={teamNamesById} />
       </section>
 
       <section className="flex flex-col gap-4">
