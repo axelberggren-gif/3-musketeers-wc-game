@@ -1017,7 +1017,7 @@ export type Database = {
       match_status: "SCHEDULED" | "LIVE" | "FINISHED" | "POSTPONED";
       pick_1x2: "HOME" | "DRAW" | "AWAY";
       prediction_type: "match" | "bracket" | "tournament" | "prop";
-      stage: "GROUP" | "R16" | "QF" | "SF" | "3RD" | "F";
+      stage: "GROUP" | "R32" | "R16" | "QF" | "SF" | "3RD" | "F";
       winner: "HOME" | "DRAW" | "AWAY";
     };
     CompositeTypes: {
@@ -1052,7 +1052,7 @@ export const Constants = {
       match_status: ["SCHEDULED", "LIVE", "FINISHED", "POSTPONED"],
       pick_1x2: ["HOME", "DRAW", "AWAY"],
       prediction_type: ["match", "bracket", "tournament", "prop"],
-      stage: ["GROUP", "R16", "QF", "SF", "3RD", "F"],
+      stage: ["GROUP", "R32", "R16", "QF", "SF", "3RD", "F"],
       winner: ["HOME", "DRAW", "AWAY"],
     },
   },
