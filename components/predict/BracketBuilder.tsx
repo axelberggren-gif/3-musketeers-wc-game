@@ -72,6 +72,12 @@ export function BracketBuilder({ slots, teams, initial, locked, r32Suggestions }
     return acc;
   }, {});
 
+  const slotIds = useMemo(() => new Set(slots.map((s) => s.slot)), [slots]);
+  const validSuggestions = useMemo(
+    () => r32Suggestions.filter((q) => slotIds.has(q.slot)),
+    [r32Suggestions, slotIds],
+  );
+
   function optionsFor(slot: BracketSlot): BracketTeam[] {
     const ups = upstreamSlots(slot.slot);
     if (ups.length === 0) return teams;
@@ -113,7 +119,7 @@ export function BracketBuilder({ slots, teams, initial, locked, r32Suggestions }
   }
 
   function applySuggestions() {
-    const filtered = r32Suggestions.filter((q) => !picks[q.slot]);
+    const filtered = validSuggestions.filter((q) => !picks[q.slot]);
     if (filtered.length === 0) return;
     const previous = { ...picks };
     const next = { ...picks };
@@ -129,18 +135,19 @@ export function BracketBuilder({ slots, teams, initial, locked, r32Suggestions }
     });
   }
 
-  const suggestableCount = r32Suggestions.filter((q) => !picks[q.slot]).length;
+  const suggestableCount = validSuggestions.filter((q) => !picks[q.slot]).length;
 
   return (
     <div className="flex flex-col gap-4">
-      {r32Suggestions.length > 0 && !locked && (
+      {validSuggestions.length > 0 && !locked && (
         <div
           className="flex flex-wrap items-center justify-between gap-3 bg-paper-2 border-2 border-ink rounded-xl px-4 py-3"
           style={{ boxShadow: "3px 3px 0 var(--ink)" }}
         >
           <p className="text-xs text-ink-soft max-w-md">
-            Based on your group-stage picks, we can suggest 32 qualifiers (top 2 per group + best
-            8 third-place teams). Fill empty R32 slots only — won&rsquo;t overwrite picks.
+            Based on your group-stage picks, suggest 16 likely R32 winners (top advancers across
+            all groups by predicted points). Fill empty R32 slots only — won&rsquo;t overwrite
+            picks.
           </p>
           <button
             type="button"
