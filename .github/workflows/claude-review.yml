@@ -92,5 +92,43 @@ jobs:
               present. Body lists each blocker with file:line references and
               suggests the fix. Use inline comments for line-specific issues.
 
-            Do not leave a `COMMENT`-only review — branch protection needs an
-            explicit APPROVE or REQUEST_CHANGES to gate auto-merge.
+            Do not leave a `COMMENT`-only review — the gate step below reads the
+            review state to decide whether this check passes. A `COMMENT` or
+            missing review fails the gate.
+
+      - name: Gate on bot verdict
+        # Run even if the action step itself errored — we want a clear pass/fail
+        # signal on this status check. Bot approvals don't count toward branch
+        # protection's "Required approvals" rule (GitHub excludes
+        # github-actions[bot] and most app bots), so the exit code of THIS step
+        # is what gates auto-merge. Branch protection requires
+        # `claude-review / review` to be green; this step encodes the verdict.
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          # The claude-code-action posts as either claude[bot] (Claude GitHub
+          # App installation token) or github-actions[bot] (workflow token).
+          # Take the most-recent review from either identity as the verdict.
+          state=$(gh api "repos/$REPO/pulls/$PR/reviews" --jq '
+            [.[] | select(.user.login == "claude[bot]" or .user.login == "github-actions[bot]")]
+            | sort_by(.submitted_at)
+            | last
+            | .state // "NONE"
+          ')
+          echo "Latest bot review state: $state"
+          case "$state" in
+            APPROVED)
+              echo "Bot approved — gate open."
+              ;;
+            CHANGES_REQUESTED)
+              echo "::error::Bot requested changes — failing check to block merge."
+              exit 1
+              ;;
+            *)
+              echo "::error::No conclusive bot review found (state=$state)."
+              exit 1
+              ;;
+          esac
