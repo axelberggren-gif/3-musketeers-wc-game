@@ -132,6 +132,39 @@ export async function setBracketPick(slot: string, teamId: string) {
   return { ok: true } as const;
 }
 
+export async function clearBracketPicks(slots: string[]) {
+  if (slots.length === 0) return { ok: true } as const;
+  const { supabase, user } = await authedClient();
+  const locks = await getLocks();
+  if (locks.round2Locked) return { ok: false, error: "Round 2 bracket is locked." } as const;
+  const { error } = await supabase
+    .from("bracket_predictions")
+    .delete()
+    .eq("user_id", user.id)
+    .in("bracket_slot", slots);
+  if (error) return { ok: false, error: error.message } as const;
+  revalidatePath("/predict/bracket");
+  return { ok: true } as const;
+}
+
+export async function setBracketPicksBulk(picks: { slot: string; teamId: string }[]) {
+  if (picks.length === 0) return { ok: true } as const;
+  const { supabase, user } = await authedClient();
+  const locks = await getLocks();
+  if (locks.round2Locked) return { ok: false, error: "Round 2 bracket is locked." } as const;
+  const rows = picks.map((p) => ({
+    user_id: user.id,
+    bracket_slot: p.slot,
+    team_id: p.teamId,
+  }));
+  const { error } = await supabase
+    .from("bracket_predictions")
+    .upsert(rows, { onConflict: "user_id,bracket_slot" });
+  if (error) return { ok: false, error: error.message } as const;
+  revalidatePath("/predict/bracket");
+  return { ok: true } as const;
+}
+
 const PICK_KINDS = ["match", "bracket", "tournament", "prop"] as const;
 
 export async function togglePickReaction(

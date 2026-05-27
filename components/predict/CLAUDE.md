@@ -11,8 +11,14 @@ server pages.
 ## Key files
 - `MatchPickCard.tsx` — One match, three big tiles (Home/Draw/Away). Optimistic update
   via `useTransition`, rolls back on server-action failure.
-- `BracketBuilder.tsx` — Grid of slots grouped by stage (R16 → QF → SF → F → W). Each
-  slot is a `<select>` over surviving teams.
+- `BracketBuilder.tsx` — Grid of slots grouped by stage (R32 → R16 → QF → SF → F → W).
+  Each slot is a `<select>` filtered by progressive reveal: R32 shows all teams; R16/QF/SF/F
+  show only the winners picked in the two upstream slots (via `BRACKET_UPSTREAM` from
+  `lib/scoring/bracket-tree.ts`); W shows only the F pick. Upstream change cascades
+  through `clearBracketPicks()` to wipe downstream picks the new winners no longer cover.
+  Owns picks state locally for the optimistic UX. Renders a "Suggest qualifiers" button
+  when `r32Suggestions` is non-empty and any R32 slot is unfilled — calls
+  `setBracketPicksBulk()` to fill empty R32 slots only (never overwrites).
 - `CountdownBanner.tsx` — Live countdown to first kickoff / knockout lock.
 - `PlayerSelect.tsx`, `TeamSelect.tsx` — Generic selectors used in tournament/player
   prop forms. `TeamSelect` supports an optional `showRanking` prop that sorts by
@@ -55,10 +61,18 @@ server pages.
 - `MatchPickCard` shows a "Locked" badge using the same prop that disables tiles —
   don't compute lock state twice.
 - `BracketBuilder` groups slots by `stage` and renders them in a fixed order
-  `R16 → QF → SF → F → W` regardless of how the parent orders them.
+  `R32 → R16 → QF → SF → F → W` regardless of how the parent orders them. The grid
+  uses `lg:grid-cols-6` to fit all six stage columns side-by-side; mobile / `sm`
+  stacks them.
+- Progressive reveal: when a R32 slot's pick changes, the cascade computes which
+  downstream picks reference winners that no longer match. Those slots are nulled
+  in local state and DELETE'd via `clearBracketPicks()` after the upstream upsert
+  succeeds. If `setBracketPick` fails, the original picks are restored and the
+  cascade is skipped — never partial writes.
 
 ## Recent changes
 <!-- Newest first. Keep last 10. One line per entry. -->
+- 2026-05-27: `BracketBuilder` extended for WC 2026's Round of 32. Stage union gains `R32`; `STAGE_ORDER` is now `R32 → R16 → QF → SF → F → W`. Grid bumped to `lg:grid-cols-6`. Each slot now filters its `<select>` options through `BRACKET_UPSTREAM` (from `lib/scoring/bracket-tree.ts`): R32 shows all 48 teams; downstream stages restrict to winners picked upstream. Picks are owned in component state (was: per-slot state); changing an upstream slot computes the set of invalidated downstream picks and clears them via `clearBracketPicks()` after the primary `setBracketPick()` succeeds. New "Suggest qualifiers" pitch-green pill above the grid: when the server passes `r32Suggestions` (top-2 per group + best-8 third-place, computed from the user's group-stage 1X2 picks), one click bulk-upserts via `setBracketPicksBulk()` into empty R32 slots only. Server action `clearBracketPicks(slots[])` and `setBracketPicksBulk(picks[])` added to `lib/predictions/actions.ts` — both gated on `locks.round2Locked`.
 - 2026-05-25: `GroupStageList.tsx` extracted from `app/(app)/predict/page.tsx`. The static group chip strip became an interactive filter: an "All groups" reset pill plus one pill per group letter; clicking toggles the active filter (re-tap clears, switch to a different group switches). Active pill uses `bg-gold`; complete groups still flip to `bg-pitch` ✓ when inactive. Date-grouping moved into the client component so it re-groups the filtered subset. Server page now passes `picksByMatch` / `groupCoverage` as plain `Record<>` objects (was `Map`) for RSC serialisation.
 - 2026-05-25: `CountdownBanner` no longer triggers React hydration mismatches. The lazy `useState` initializer used to call `Date.now()` during SSR, but SSR and hydration run a few hundred ms apart so the formatted string differed and React tore the DOM. `remaining` now starts as `null` (placeholder DOM `--:--:--` on both server and client first render); a `requestAnimationFrame` inside `useEffect` schedules the first real tick, then a 1 s interval drives the countdown. Refs Sentry `JAVASCRIPT-NEXTJS-5` / #47.
 - 2026-05-22: Sticker Stadium re-skin. `MatchPickCard` rebuilt with sticker tiles (paper-2 bg, ink shadow, gold selection state) and a "✓ Picked / Pick! / Locked" status pill. Tile tap now toggles (re-tap clears the pick). `BracketBuilder` slots use a dashed-border "?" empty state, gold shadow on the Champion slot when filled, sticker stage headers. `CountdownBanner` rebuilt as a coral-shadow sticker pill with mono `LOCKS IN` label + Archivo Black coral countdown. `TeamSelect` / `PlayerSelect` / `NumberInput` / `GroupWinnerPicker` / `TournamentForm` inherit the new `.input` + `.label` chrome with no behaviour changes. Bracket progressive-reveal (R16 pre-set, QF/SF/F derive from upstream, downstream invalidation) is **not** implemented — tracked in `/DESIGN_MISALIGNMENTS.md` §7.
