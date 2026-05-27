@@ -68,12 +68,30 @@ describe("predictedGroupStandings", () => {
 });
 
 describe("suggestR32Qualifiers", () => {
-  it("places group winner/runner-up into slots and best-3rds into 25..32", () => {
+  it("never returns more than 16 picks (one per R32 match slot)", () => {
+    const standings: { teamId: string; groupLetter: string; points: number; played: number }[] = [];
+    const names: Record<string, string> = {};
+    for (const letter of ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"]) {
+      for (let i = 1; i <= 4; i++) {
+        const id = `${letter}${i}`;
+        standings.push({ teamId: id, groupLetter: letter, points: 12 - i * 3, played: 3 });
+        names[id] = id;
+      }
+    }
+    const qualifiers = suggestR32Qualifiers(standings, names);
+    expect(qualifiers).toHaveLength(16);
+    for (const q of qualifiers) {
+      const n = Number(q.slot.split("-")[1]);
+      expect(n).toBeGreaterThanOrEqual(1);
+      expect(n).toBeLessThanOrEqual(16);
+    }
+  });
+
+  it("ranks top advancers by points across all groups", () => {
     const standings = [
       { teamId: "A1", groupLetter: "A", points: 9, played: 3 },
       { teamId: "A2", groupLetter: "A", points: 6, played: 3 },
       { teamId: "A3", groupLetter: "A", points: 3, played: 3 },
-      { teamId: "A4", groupLetter: "A", points: 0, played: 3 },
       { teamId: "B1", groupLetter: "B", points: 7, played: 3 },
       { teamId: "B2", groupLetter: "B", points: 5, played: 3 },
       { teamId: "B3", groupLetter: "B", points: 4, played: 3 },
@@ -88,11 +106,11 @@ describe("suggestR32Qualifiers", () => {
     });
     const bySlot = Object.fromEntries(qualifiers.map((q) => [q.slot, q.teamId]));
     expect(bySlot["R32-1"]).toBe("A1");
-    expect(bySlot["R32-2"]).toBe("A2");
-    expect(bySlot["R32-3"]).toBe("B1");
+    expect(bySlot["R32-2"]).toBe("B1");
+    expect(bySlot["R32-3"]).toBe("A2");
     expect(bySlot["R32-4"]).toBe("B2");
-    expect(bySlot["R32-25"]).toBe("B3");
-    expect(bySlot["R32-26"]).toBe("A3");
+    expect(qualifiers.find((q) => q.teamId === "A3")).toBeUndefined();
+    expect(qualifiers.find((q) => q.teamId === "B3")).toBeUndefined();
   });
 
   it("breaks ties alphabetically by team name", () => {

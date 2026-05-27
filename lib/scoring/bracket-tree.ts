@@ -77,6 +77,8 @@ export function predictedGroupStandings(
 
 export type Qualifier = { slot: string; teamId: string };
 
+export const R32_SLOT_COUNT = 16;
+
 export function suggestR32Qualifiers(
   standings: GroupStanding[],
   teamNameById: Record<string, string>,
@@ -95,23 +97,13 @@ export function suggestR32Qualifiers(
     );
   };
 
-  const qualifiers: Qualifier[] = [];
-  const thirds: GroupStanding[] = [];
-
-  GROUP_LETTERS.forEach((letter, idx) => {
+  const advancers: GroupStanding[] = [];
+  for (const letter of GROUP_LETTERS) {
     const sorted = (byGroup.get(letter) ?? []).slice().sort(sortStanding);
-    const winner = sorted[0];
-    const runnerUp = sorted[1];
-    const third = sorted[2];
-    if (winner) qualifiers.push({ slot: `R32-${idx * 2 + 1}`, teamId: winner.teamId });
-    if (runnerUp) qualifiers.push({ slot: `R32-${idx * 2 + 2}`, teamId: runnerUp.teamId });
-    if (third) thirds.push(third);
-  });
+    if (sorted[0]) advancers.push(sorted[0]);
+    if (sorted[1]) advancers.push(sorted[1]);
+  }
 
-  const bestThirds = thirds.slice().sort(sortStanding).slice(0, 8);
-  bestThirds.forEach((t, idx) => {
-    qualifiers.push({ slot: `R32-${25 + idx}`, teamId: t.teamId });
-  });
-
-  return qualifiers;
+  const top = advancers.sort(sortStanding).slice(0, R32_SLOT_COUNT);
+  return top.map((s, idx) => ({ slot: `R32-${idx + 1}`, teamId: s.teamId }));
 }
