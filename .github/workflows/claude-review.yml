@@ -1,0 +1,96 @@
+name: claude-review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: read
+  id-token: write
+
+jobs:
+  review:
+    # Only review non-draft PRs from trusted authors. author_association is one of
+    # OWNER / MEMBER / COLLABORATOR for people on the repo; anyone else (drive-by
+    # forks, untrusted accounts) skips review entirely so they can't trigger an
+    # auto-merge.
+    if: |
+      github.event.pull_request.draft == false &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          # Authenticate against the maintainer's Claude Pro/Max subscription
+          # (generated locally via `claude setup-token`) rather than a metered
+          # API key. Usage counts against the subscription's included limits.
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prompt: |
+            You are reviewing PR #${{ github.event.pull_request.number }} on
+            ${{ github.repository }}. Before reading the diff, read AGENTS.md and
+            any per-directory CLAUDE.md files for areas the PR touches — those are
+            the canonical source of project invariants.
+
+            ## Block (REQUEST_CHANGES) on
+
+            1. **Correctness bugs**: logic errors, broken contracts, security
+               issues (XSS, SQLi, command injection, secrets exposure), race
+               conditions, RLS leaks, unhandled error branches that crash prod.
+
+            2. **Project invariants** (from AGENTS.md + CLAUDE.md files):
+               - **Points sync**: any change to `POINTS` values in
+                 `lib/scoring/rules.ts` MUST have a matching SQL function update
+                 in a NEW migration (not an edit to 0002/0005). Same for
+                 `FIFA_RANKINGS_2026` ↔ `teams.fifa_ranking` seed.
+               - **Migrations are append-only**: no edits to any existing
+                 `supabase/migrations/000N_*.sql` file — only new numbered files.
+               - **Cron auth**: every handler under `app/api/cron/*` verifies
+                 `CRON_SECRET` via the `authorized()` pattern.
+               - **Service-role guard**: `supabaseService()` never called from
+                 user-facing routes without an explicit authorization check
+                 above it (it bypasses RLS).
+               - **RLS-first for picks**: pick visibility before kickoff is
+                 enforced by RLS, not application code.
+               - **Server-action shape**: server actions return
+                 `{ ok: true } | { ok: false; error: string }` and the UI
+                 handles both branches.
+               - **AI co-author trailer**: every commit on the PR ends with
+                 `Co-authored-by: Claude <noreply@anthropic.com>` (or the
+                 appropriate agent trailer).
+               - **Idempotent scoring**: writes to `point_awards` go through
+                 the `score_*()` SQL functions, never raw inserts.
+
+            3. **Test coverage** for new logic:
+               - New functions in `lib/scoring/`, `lib/predictions/`,
+                 `lib/banter/`, `lib/auth/`, or `lib/football-data/` need
+                 a corresponding test, OR the PR body explains why not.
+               - New migrations that add scoring/RLS logic need either a unit
+                 test on the TS caller or an explicit justification.
+               - Pure UI / styling / copy / docs PRs are exempt.
+
+            ## Do NOT block on
+
+            - Naming preferences, comment density, micro-refactors.
+            - Hypothetical future scenarios not in the diff.
+            - Style nits the existing codebase doesn't already follow.
+
+            ## How to deliver the verdict
+
+            After your analysis, submit ONE review on the PR using the GitHub
+            tools available to you:
+            - **Approve** (`event: APPROVE`) if no blocking issues. Body can be
+              brief — a sentence or two summarising what you checked.
+            - **Request changes** (`event: REQUEST_CHANGES`) if any blocker is
+              present. Body lists each blocker with file:line references and
+              suggests the fix. Use inline comments for line-specific issues.
+
+            Do not leave a `COMMENT`-only review — branch protection needs an
+            explicit APPROVE or REQUEST_CHANGES to gate auto-merge.

@@ -5,7 +5,6 @@ import { loadProfileStats } from "@/lib/stats/profile";
 import { PickReactionStrip } from "@/components/social/PickReactionStrip";
 import { loadPickReactions } from "@/lib/predictions/reactions";
 import { aggregateKey } from "@/lib/predictions/reactions-shared";
-import { unwrapRelation } from "@/lib/utils";
 import type { Pick1X2 } from "@/lib/supabase/types";
 
 type TeamLite = { code: string; name: string };
@@ -15,8 +14,8 @@ type MatchLite = {
   status: string | null;
   home_score: number | null;
   away_score: number | null;
-  home: TeamLite | TeamLite[] | null;
-  away: TeamLite | TeamLite[] | null;
+  home: TeamLite | null;
+  away: TeamLite | null;
 };
 
 export default async function ProfilePage({
@@ -41,7 +40,7 @@ export default async function ProfilePage({
   const { data: recentPicksRaw } = await supabase
     .from("match_predictions")
     .select(
-      "id, pick, submitted_at, match:match_id(id, kickoff_at, status, home_score, away_score, home:home_team_id(code, name), away:away_team_id(code, name))",
+      "id, pick, submitted_at, match:matches!match_id(id, kickoff_at, status, home_score, away_score, home:teams!home_team_id(code, name), away:teams!away_team_id(code, name))",
     )
     .eq("user_id", profile.id)
     .order("submitted_at", { ascending: false })
@@ -98,9 +97,9 @@ export default async function ProfilePage({
           <h2 className="font-display uppercase tracking-wide text-base">Recent picks</h2>
           <ul className="flex flex-col divide-y divide-dashed divide-ink-soft/40">
             {recentPicks.map((row) => {
-              const match = unwrapRelation(row.match as MatchLite | MatchLite[] | null);
-              const home = unwrapRelation(match?.home ?? null);
-              const away = unwrapRelation(match?.away ?? null);
+              const match = row.match as MatchLite | null;
+              const home = match?.home ?? null;
+              const away = match?.away ?? null;
               const pick = row.pick as Pick1X2;
               const finished = match?.status === "FINISHED";
               const score =

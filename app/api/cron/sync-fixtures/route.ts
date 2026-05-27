@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { syncFixtures } from "@/lib/football-data/sync";
+import { authorizedCron } from "@/lib/cron/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
-  if (!authorized(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!authorizedCron(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
     const result = await syncFixtures();
     return NextResponse.json({ ok: true, ...result });
@@ -19,12 +20,4 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   return POST(request);
-}
-
-function authorized(request: NextRequest) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return false;
-  const header = request.headers.get("x-cron-secret") ?? request.headers.get("authorization");
-  if (!header) return false;
-  return header === secret || header === `Bearer ${secret}`;
 }

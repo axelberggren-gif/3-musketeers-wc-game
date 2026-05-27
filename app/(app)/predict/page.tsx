@@ -1,8 +1,7 @@
 import * as Sentry from "@sentry/nextjs";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { computeLockState } from "@/lib/scoring/lock";
-import { unwrapRelation } from "@/lib/utils";
-import { MatchPickCard, type MatchPickRow } from "@/components/predict/MatchPickCard";
+import { GroupStageList, type GroupStageMatch } from "@/components/predict/GroupStageList";
 import { TournamentForm } from "@/components/predict/TournamentForm";
 import { GroupWinnerPicker } from "@/components/predict/GroupWinnerPicker";
 import type { TeamOption } from "@/components/predict/TeamSelect";
@@ -35,7 +34,7 @@ export default async function Round1Page() {
     supabase
       .from("matches")
       .select(
-        "id, kickoff_at, group_letter, stage, home:home_team_id(id, name, short_name, code, crest_url), away:away_team_id(id, name, short_name, code, crest_url)",
+        "id, kickoff_at, group_letter, stage, home:teams!home_team_id(id, name, short_name, code, crest_url), away:teams!away_team_id(id, name, short_name, code, crest_url)",
       )
       .eq("stage", "GROUP")
       .order("kickoff_at", { ascending: true }),
@@ -125,16 +124,10 @@ export default async function Round1Page() {
 
   const tournament = tournamentRes.data;
   const locks = computeLockState(tournament);
-  const matches = (matchesRes.data ?? []) as unknown as Array<{
-    id: string;
-    kickoff_at: string;
-    group_letter: string | null;
-    home: MatchPickRow["home"];
-    away: MatchPickRow["away"];
-  }>;
-  const picksByMatch = new Map<string, Pick1X2>(
+  const matches = (matchesRes.data ?? []) as unknown as GroupStageMatch[];
+  const picksByMatch = Object.fromEntries(
     (picksRes.data ?? []).map((r) => [r.match_id as string, r.pick as Pick1X2]),
-  );
+  ) as Record<string, Pick1X2>;
   const propPicks = Object.fromEntries(
     (propsRes.data ?? []).map((r) => [r.prop_key as string, r.player_id as string]),
   ) as Record<string, string | null>;
@@ -162,30 +155,25 @@ export default async function Round1Page() {
   const players = (playersRes.data ?? []).map((p) => ({
     id: p.id,
     name: p.name,
-    team_name: unwrapRelation(p.team as { name: string } | { name: string }[] | null)?.name ?? null,
+    team_name: (p.team as { name: string } | null)?.name ?? null,
   }));
   const lastSync = lastSyncRes.data as
     | { ran_at: string; endpoint: string; status_code: number | null; message: string | null }
     | null;
 
-  // Group matches by date for nicer layout
-  const grouped = matches.reduce<Record<string, typeof matches>>((acc, m) => {
-    const date = new Date(m.kickoff_at).toDateString();
-    (acc[date] ??= []).push(m);
-    return acc;
-  }, {});
-
   // Tally pick coverage per group letter so we can flag complete groups with ✓.
-  const groupCoverage = new Map<string, { picked: number; total: number }>();
+  // The date grouping that used to live here moved into <GroupStageList /> so it
+  // can re-group the filtered subset client-side when a group filter is active.
+  const groupCoverage: Record<string, { picked: number; total: number }> = {};
   for (const m of matches) {
     if (!m.group_letter) continue;
-    const stats = groupCoverage.get(m.group_letter) ?? { picked: 0, total: 0 };
+    const stats = groupCoverage[m.group_letter] ?? { picked: 0, total: 0 };
     stats.total += 1;
-    if (picksByMatch.has(m.id)) stats.picked += 1;
-    groupCoverage.set(m.group_letter, stats);
+    if (picksByMatch[m.id] != null) stats.picked += 1;
+    groupCoverage[m.group_letter] = stats;
   }
-  const groupLetters = Array.from(groupCoverage.keys()).sort();
-  const totalPicked = picksByMatch.size;
+  const groupLetters = Object.keys(groupCoverage).sort();
+  const totalPicked = Object.keys(picksByMatch).length;
   const totalToGo = matches.length - totalPicked;
 
   return (
@@ -262,32 +250,7 @@ export default async function Round1Page() {
             <b className="text-coral">{totalToGo}</b> to go
           </span>
         </div>
-        {groupLetters.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {groupLetters.map((g) => {
-              const stats = groupCoverage.get(g)!;
-              const complete = stats.picked === stats.total && stats.total > 0;
-              return (
-                <span
-                  key={g}
-                  className={[
-                    "inline-flex items-center gap-1.5 rounded-full border-2 border-ink font-display uppercase text-[11px] tracking-wider px-3 py-1",
-                    complete ? "bg-pitch text-white" : "bg-white text-ink",
-                  ].join(" ")}
-                  style={{ boxShadow: complete ? "3px 3px 0 var(--ink)" : "3px 3px 0 var(--ink)" }}
-                >
-                  Group {g}
-                  {complete ? <span aria-label="complete">✓</span> : (
-                    <span className="font-mono-sticker text-[10px] text-ink-soft normal-case">
-                      {stats.picked}/{stats.total}
-                    </span>
-                  )}
-                </span>
-              );
-            })}
-          </div>
-        )}
-        {matches.length === 0 && (
+        {matches.length === 0 ? (
           <div className="card flex flex-col gap-1 text-sm text-ink-soft">
             <p>
               Group-stage fixtures haven&rsquo;t been seeded yet. An admin needs to run the
@@ -307,30 +270,15 @@ export default async function Round1Page() {
               </p>
             )}
           </div>
+        ) : (
+          <GroupStageList
+            matches={matches}
+            groupLetters={groupLetters}
+            groupCoverage={groupCoverage}
+            picksByMatch={picksByMatch}
+            locked={locks.round1Locked}
+          />
         )}
-        {Object.entries(grouped).map(([date, group]) => (
-          <div key={date} className="flex flex-col gap-3">
-            <h3 className="font-mono-sticker text-[11px] uppercase tracking-widest text-ink-soft font-medium">
-              {date}
-            </h3>
-            <div className="grid md:grid-cols-2 gap-3">
-              {group.map((m) => (
-                <MatchPickCard
-                  key={m.id}
-                  match={{
-                    id: m.id,
-                    kickoff_at: m.kickoff_at,
-                    group_letter: m.group_letter,
-                    home: m.home,
-                    away: m.away,
-                  }}
-                  initialPick={picksByMatch.get(m.id) ?? null}
-                  locked={locks.round1Locked}
-                />
-              ))}
-            </div>
-          </div>
-        ))}
       </section>
     </main>
   );

@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { supabaseServer } from "@/lib/supabase/server";
-import { unwrapRelation } from "@/lib/utils";
 import { CreateLeagueForm } from "./CreateLeagueForm";
 
 export default async function LeaguesPage() {
@@ -25,7 +24,7 @@ export default async function LeaguesPage() {
   const leagues = (memberships ?? [])
     .map((m) => ({
       role: m.role as "owner" | "member",
-      league: unwrapRelation(m.league as LeagueRow | LeagueRow[] | null),
+      league: m.league as LeagueRow | null,
     }))
     .filter((m): m is { role: "owner" | "member"; league: LeagueRow } => m.league !== null);
 
@@ -33,13 +32,14 @@ export default async function LeaguesPage() {
   if (leagues.length) {
     const { data: countRows } = await supabase
       .from("league_members")
-      .select("league_id")
+      .select("league_id, member_count:user_id.count()")
       .in(
         "league_id",
         leagues.map((m) => m.league.id),
       );
-    for (const row of countRows ?? []) {
-      counts[row.league_id as string] = (counts[row.league_id as string] ?? 0) + 1;
+    const rows = (countRows ?? []) as unknown as { league_id: string; member_count: number }[];
+    for (const row of rows) {
+      counts[row.league_id] = Number(row.member_count);
     }
   }
 

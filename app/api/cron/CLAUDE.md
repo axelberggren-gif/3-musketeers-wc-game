@@ -24,9 +24,11 @@ admin UI for ad-hoc syncs.
 
 ## Invariants (do not break)
 - **Every cron handler MUST verify `CRON_SECRET`** via the `x-cron-secret` header or
-  `Authorization: Bearer <secret>`. Without it, return 401 immediately. Look at
-  `sync-fixtures/route.ts:authorized()` for the reference pattern — copy it verbatim
-  when adding new cron handlers.
+  `Authorization: Bearer <secret>`. Without it, return 401 immediately. Use the
+  shared `authorizedCron(request)` helper from `@/lib/cron/auth` — it compares the
+  header against the secret with `crypto.timingSafeEqual` (length-mismatch
+  short-circuits first). Never roll a per-route copy; the central helper is the
+  single source of truth.
 - The pg_cron schedule is defined in `supabase/migrations/0003_cron.sql`. If you add
   a new cron endpoint here, you MUST add a `cron.schedule(...)` call in a new
   migration (migrations are append-only — don't edit 0003).
@@ -43,4 +45,5 @@ admin UI for ad-hoc syncs.
 
 ## Recent changes
 <!-- Newest first. Keep last 10. One line per entry. -->
+- 2026-05-26: `authorized()` helper extracted to `lib/cron/auth.ts` as `authorizedCron(request)` and deduped between `sync-fixtures/route.ts` and `sync-scorers/route.ts`. Secret comparison now uses `crypto.timingSafeEqual` (with a length-mismatch short-circuit so the timing-safe path never sees mismatched-length buffers) instead of `===`. Refs #17.
 - 2026-05-22: Both `sync-fixtures` and `sync-scorers` catch blocks now call `Sentry.captureException(e, { tags: { cron: "..." } })` before returning the JSON error. No-op when `NEXT_PUBLIC_SENTRY_DSN` is unset.

@@ -1,0 +1,35 @@
+name: auto-merge
+
+# When the review bot (or a human) approves a PR, flip on GitHub's auto-merge.
+# Branch protection on `main` holds the merge until all required checks
+# (`ci`, `claude-review / review`, `pr-title-lint / lint`) are green, so an
+# approval alone never ships code — it just removes the human-merge step.
+#
+# Once main updates, Vercel's GitHub integration promotes the new commit to
+# production automatically. No extra deploy workflow needed here.
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  enable:
+    if: |
+      github.event.review.state == 'approved' &&
+      github.event.pull_request.draft == false &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enable auto-merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Idempotent: re-running on the same PR is a no-op once auto-merge is
+          # already enabled. Squash is the only merge strategy on main.
+          gh pr merge "$PR_NUMBER" --auto --squash --repo "$REPO"

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { supabaseServer } from "@/lib/supabase/server";
+import type { LeagueStandingsRow } from "@/lib/supabase/types";
 import { LeaderboardLive } from "./LeaderboardLive";
 
 export default async function LeaderboardPage({
@@ -51,7 +52,7 @@ export default async function LeaderboardPage({
 
       <LeaderboardLive
         leagueId={league.id}
-        initialRows={rows ?? []}
+        initialRows={(rows ?? []) as LeagueStandingsRow[]}
         currentUserId={user?.id ?? null}
       />
     </main>

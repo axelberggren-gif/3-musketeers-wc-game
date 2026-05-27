@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import * as Sentry from "@sentry/nextjs";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
-import { randomToken, unwrapRelation } from "@/lib/utils";
+import { randomToken } from "@/lib/utils";
 
 function slugify(name: string) {
   return name
@@ -31,9 +31,11 @@ export async function createLeague(_prev: CreateLeagueState, formData: FormData)
   const service = supabaseService();
   let slug = slugify(name);
   if (!slug) slug = randomToken(8);
-  for (let i = 0; i < 8; i++) {
-    const { data: existing } = await service.from("leagues").select("id").eq("slug", slug).maybeSingle();
-    if (!existing) break;
+  const { data: existing } = await service.from("leagues").select("id").eq("slug", slug).maybeSingle();
+  if (existing) {
+    // randomToken(4) over a 32-char alphabet (~1M combos) makes a second
+    // collision astronomically rare for a private friends league — skip
+    // the wasted re-lookup.
     slug = `${slugify(name)}-${randomToken(4)}`;
   }
 
@@ -150,9 +152,7 @@ export async function revokeInvite(inviteId: string, leagueSlug: string) {
     .select("league_id, leagues(owner_id)")
     .eq("id", inviteId)
     .single();
-  const ownerRel = unwrapRelation(
-    invite?.leagues as { owner_id: string } | { owner_id: string }[] | null,
-  );
+  const ownerRel = invite?.leagues as { owner_id: string } | null;
   if (!invite || ownerRel?.owner_id !== user.id) {
     return { ok: false, error: "Forbidden" } as const;
   }
