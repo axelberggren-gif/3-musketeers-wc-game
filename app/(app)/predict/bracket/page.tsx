@@ -2,17 +2,21 @@ import { supabaseServer } from "@/lib/supabase/server";
 import { computeLockState } from "@/lib/scoring/lock";
 import {
   BracketBuilder,
+  type BracketMatchPair,
   type BracketSlot,
   type BracketStage,
   type BracketTeam,
 } from "@/components/predict/BracketBuilder";
 import { CountdownBanner } from "@/components/predict/CountdownBanner";
 import {
+  filterSuggestionsByMatchPairs,
   predictedGroupStandings,
   suggestR32Qualifiers,
   type GroupMatch,
 } from "@/lib/scoring/bracket-tree";
 import type { Pick1X2 } from "@/lib/supabase/types";
+
+const KNOCKOUT_STAGES = ["R32", "R16", "QF", "SF", "F"] as const;
 
 export default async function BracketPage() {
   const supabase = await supabaseServer();
@@ -21,7 +25,14 @@ export default async function BracketPage() {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const [tournamentRes, teamsRes, picksRes, groupMatchesRes, groupPicksRes] = await Promise.all([
+  const [
+    tournamentRes,
+    teamsRes,
+    picksRes,
+    groupMatchesRes,
+    groupPicksRes,
+    knockoutMatchesRes,
+  ] = await Promise.all([
     supabase.from("tournament").select("*").single(),
     supabase
       .from("teams")
@@ -33,6 +44,10 @@ export default async function BracketPage() {
       .select("id, group_letter, home_team_id, away_team_id")
       .eq("stage", "GROUP"),
     supabase.from("match_predictions").select("match_id, pick").eq("user_id", user.id),
+    supabase
+      .from("matches")
+      .select("bracket_slot, home_team_id, away_team_id")
+      .in("stage", KNOCKOUT_STAGES),
   ]);
 
   const tournament = tournamentRes.data;
@@ -50,6 +65,22 @@ export default async function BracketPage() {
   const teamNameById = Object.fromEntries(teams.map((t) => [t.id, t.name]));
   const r32Suggestions = suggestR32Qualifiers(standings, teamNameById);
 
+  // Real knockout matches (once football-data lands them via syncFixtures()).
+  // Only slots with BOTH team_ids set are usable — R16/QF/etc may exist as
+  // placeholder rows before R32 is played out, with NULL home/away. Those fall
+  // through to the dropdown fallback in BracketBuilder.
+  const slotMatches: Record<string, BracketMatchPair> = {};
+  for (const m of knockoutMatchesRes.data ?? []) {
+    if (m.bracket_slot && m.home_team_id && m.away_team_id) {
+      slotMatches[m.bracket_slot] = {
+        homeTeamId: m.home_team_id,
+        awayTeamId: m.away_team_id,
+      };
+    }
+  }
+
+  const compatibleSuggestions = filterSuggestionsByMatchPairs(r32Suggestions, slotMatches);
+
   const slots = buildSlotDefs();
 
   return (
@@ -66,8 +97,8 @@ export default async function BracketPage() {
         </h1>
         <p className="text-sm text-ink-soft">
           Fill in your bracket from the Round of 32 through the Final, plus your overall champion.
-          Each downstream slot only shows winners from your upstream picks. Locks at the start of
-          R32.
+          Once the real matches drop you pick a winner per match; until then each slot reveals from
+          your upstream picks. Locks at the start of R32.
         </p>
       </header>
 
@@ -83,7 +114,8 @@ export default async function BracketPage() {
         teams={teams}
         initial={initial}
         locked={locks.round2Locked}
-        r32Suggestions={r32Suggestions}
+        r32Suggestions={compatibleSuggestions}
+        slotMatches={slotMatches}
       />
     </main>
   );

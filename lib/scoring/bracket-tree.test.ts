@@ -3,6 +3,7 @@ import {
   upstreamSlots,
   predictedGroupStandings,
   suggestR32Qualifiers,
+  filterSuggestionsByMatchPairs,
   type GroupMatch,
 } from "./bracket-tree";
 
@@ -122,5 +123,48 @@ describe("suggestR32Qualifiers", () => {
     const bySlot = Object.fromEntries(qualifiers.map((q) => [q.slot, q.teamId]));
     expect(bySlot["R32-1"]).toBe("ty");
     expect(bySlot["R32-2"]).toBe("tx");
+  });
+});
+
+describe("filterSuggestionsByMatchPairs", () => {
+  it("passes everything through when no slot matches are known", () => {
+    const suggestions = [
+      { slot: "R32-1", teamId: "brazil" },
+      { slot: "R32-2", teamId: "spain" },
+    ];
+    expect(filterSuggestionsByMatchPairs(suggestions, {})).toEqual(suggestions);
+  });
+
+  it("keeps a suggestion when its team is one of the match's two teams", () => {
+    const suggestions = [
+      { slot: "R32-1", teamId: "brazil" },
+      { slot: "R32-2", teamId: "spain" },
+    ];
+    const slotMatches = {
+      "R32-1": { homeTeamId: "brazil", awayTeamId: "mexico" },
+      "R32-2": { homeTeamId: "germany", awayTeamId: "spain" },
+    };
+    expect(filterSuggestionsByMatchPairs(suggestions, slotMatches)).toEqual(suggestions);
+  });
+
+  it("drops a suggestion whose team is neither side of the match", () => {
+    const suggestions = [
+      { slot: "R32-1", teamId: "brazil" },
+      { slot: "R32-2", teamId: "spain" },
+    ];
+    const slotMatches = {
+      "R32-1": { homeTeamId: "argentina", awayTeamId: "mexico" },
+      "R32-2": { homeTeamId: "germany", awayTeamId: "spain" },
+    };
+    const filtered = filterSuggestionsByMatchPairs(suggestions, slotMatches);
+    expect(filtered).toEqual([{ slot: "R32-2", teamId: "spain" }]);
+  });
+
+  it("leaves a suggestion untouched if its slot has no real match yet", () => {
+    const suggestions = [{ slot: "R32-5", teamId: "argentina" }];
+    const slotMatches = {
+      "R32-1": { homeTeamId: "brazil", awayTeamId: "mexico" },
+    };
+    expect(filterSuggestionsByMatchPairs(suggestions, slotMatches)).toEqual(suggestions);
   });
 });

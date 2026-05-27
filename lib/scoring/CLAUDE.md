@@ -18,7 +18,9 @@ Actual point-awarding writes happen in SQL functions (see `supabase/migrations/0
 - `bracket-tree.ts` — `BRACKET_UPSTREAM` map encoding which slots feed each
   knockout slot (R32 pairs → R16-N, R16 pairs → QF-X, etc.) plus
   `predictedGroupStandings()` and `suggestR32Qualifiers()` for the bracket
-  page's "Suggest qualifiers" button. Pure functions, no IO.
+  page's "Suggest qualifiers" button, and `filterSuggestionsByMatchPairs()`
+  which drops suggestions whose team isn't part of the real match for that
+  slot once football-data lands knockout fixtures. Pure functions, no IO.
 
 ## Conventions
 - All point values are exported as a `const` object — never inline a magic number
@@ -56,6 +58,7 @@ Actual point-awarding writes happen in SQL functions (see `supabase/migrations/0
 
 ## Recent changes
 <!-- Newest first. Keep last 10. One line per entry. -->
+- 2026-05-27: `filterSuggestionsByMatchPairs(suggestions, slotMatches)` added to `bracket-tree.ts`. Drops a `Qualifier` whose `teamId` isn't one of the two team IDs in `slotMatches[slot]` (when the slot has a real match imported from football-data). Lets the bracket "Suggest qualifiers" button stay accurate after the draw — pre-import the map is empty and every suggestion passes through; post-import we only suggest a team if it's actually playing in that R32 match. Tests cover empty-map passthrough, match+team match, mismatch dropped, and slot-without-match passthrough. New `BracketSlotMatchPair` type exported alongside.
 - 2026-05-27: `suggestR32Qualifiers` capped at 16 picks (one per R32 match slot — `R32-1..R32-16`). Previous version generated up to 32 picks (top-2 per group + best-8 third-place into `R32-25..R32-32`), which produced ghost suggestions for slots that don't exist in `buildSlotDefs()` — `setBracketPicksBulk` would have written orphan `bracket_predictions` rows that no match-import path can ever resolve. New rule: collect group winners + runners-up across all 12 groups (24 candidates), sort by predicted points (alphabetical name tiebreaker), take top 16, place in `R32-1..R32-16` in that order. Third-place teams no longer factor in — each R32 slot represents the **winner** of an R32 match, not a team position. New `R32_SLOT_COUNT = 16` constant pinned in the helper.
 - 2026-05-27: New `bracket-tree.ts` encodes the knockout slot graph (`BRACKET_UPSTREAM`: R32 pairs feed R16-N; R16 pairs feed QF-X; QF pairs feed SF-X; SF pair feeds F; F feeds W). Adds `predictedGroupStandings(matches, picksByMatchId)` (3/1/0 point tally from user 1X2 picks, ignores matches missing group letter or teams or pick) and `suggestR32Qualifiers(standings, teamNameById)` (now: top 16 advancers across all groups by predicted points). Pure functions, no IO. Powers progressive reveal + "Suggest qualifiers" button on `/predict/bracket`.
 - 2026-05-26: Added `POINTS.bracket.R32 = 1` for the new WC 2026 Round of 32 (first knockout round, less prestigious than R16 = 2). Mirrored in `supabase/migrations/0013_add_r32_stage.sql` (`points_bracket_slot` now matches `R32-%` → 1). `BRACKET_STAGE_BY_SLOT_PREFIX` gets an `R32: "R32"` entry so `bracketPointsForSlot("R32-1")` returns 1. UI and auto-advancement land in follow-up PRs; this PR is the schema/scoring foundation only.
