@@ -97,18 +97,11 @@ a placeholder card noting where this will land. The original `AccuracyChart` com
 is still in `components/stats/AccuracyChart.tsx` but is no longer rendered (per chat2:
 "per-MD doesn't apply — all predictions lock at tournament start").
 
-## 5. Album progress strip
+## 5. Album progress strip — removed
 
-**Design**: `project/sticker-b.jsx` league screen. 80-cell grid showing the user's
-collection state — green cells = collected, coral = pending, gold = upcoming, paper-2 =
-locked.
-
-**Needed to ship**:
-- Derive "stickers collected" from `match_predictions` count + tournament/prop picks.
-- Define what 80 means (current design hard-codes it; in reality the count is matches +
-  tournament outcomes + props = some larger number).
-
-**Why deferred**: cosmetic + depends on settling the "album" naming question (#14).
+Dropped with the album metaphor (issue #44, decided 2026-05-28: option 3). The
+80-cell sticker-collection grid no longer maps to any UX copy we're carrying
+through. No code shipped.
 
 ## 6. Live indicator pill (● N LIVE)
 
@@ -201,18 +194,21 @@ styling that ships in this PR. Computed inline from the `picksByMatch` map.
 `project/tweaks-panel.jsx` + `Kickoff.html`'s `<BottomBar>` are prototype-only chrome and
 intentionally not implemented.
 
-## 14. "Album" naming
+## 14. "Album" naming — decided (drop)
 
-Chat2 left this open. Current default: keep "album" / "collect" / "stickers" in branded
-moments only (eyebrow badges, CTA copy on landing: "Start the album") and **not** in
-primary navigation labels (no "Your collection" item, no "Album progress" header). Pick
-a direction before adding banter/Pulse/album-progress — once UX labels start using the
-word, it's harder to walk back.
+Resolved 2026-05-28 via issue #44: option 3 ("drop"). UX copy no longer
+references "album", "stickers", "collect", or "collection" anywhere — it's a
+pure football-prediction game in language. The sticker visual primitives
+(paper bg, chunky shadows, holo card, gold/coral/pitch palette) stay as the
+design identity; they're just chunky visual styling now, not a sticker-book
+mental model. Landing CTA renamed "▶ Start the album" → "▶ Start predicting";
+meta description dropped "Sticker album for fixtures". §5 (Album progress
+strip) was removed as a target feature in the same PR.
 
 ## 15. Holo card on leaderboard sidebar ("your big sticker")
 
 **Design**: `project/sticker-b.jsx` shows a hero holographic card on the leaderboard
-right rail with rank, points, "next to collect" match + countdown, and a coral "▶ Pick
+right rail with rank, points, next-up match + countdown, and a coral "▶ Pick
 now" button.
 
 **Current state**: the leaderboard is a single-column list. The user's row gets the gold

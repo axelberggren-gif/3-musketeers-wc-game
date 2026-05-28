@@ -48,7 +48,7 @@ export default async function Home() {
         </p>
         <div className="flex flex-wrap gap-3 justify-center mt-2">
           <Link href="/login" className="btn btn-coral">
-            ▶ Start the album
+            ▶ Start predicting
           </Link>
           <a href="#how" className="btn btn-secondary">
             How it works

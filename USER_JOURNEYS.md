@@ -101,7 +101,7 @@ flowchart TD
 - Verify hero "Predict every match. BEAT your friends." renders.
 - Verify the 5 sticker country flags carousel (ARG, BRA, ESP, FRA, GER) appears with the "T-MINUS 21 DAYS" badge.
 - Verify the 4 feature cards (Round 1, Round 2, Private leagues, Live leaderboard).
-- Click **"▶ Start the album"** → routes to `/login`.
+- Click **"▶ Start predicting"** → routes to `/login`.
 - Click **"How it works"** → in-page anchor scrolls to `#how`.
 - Click the top-right **"Sign in"** button → routes to `/login`.
 - Footer "⚽ Stick · Predict · Score ⚽" visible on green-stripe pitch background.
@@ -414,7 +414,7 @@ These are not user-triggered journeys, but their downstream effects are visible:
 
 Tick when verified. Each row corresponds to a journey above.
 
-- [ ] A1 Landing renders, "Start the album" → `/login`
+- [ ] A1 Landing renders, "Start predicting" → `/login`
 - [ ] A2 Valid invite (anon) → login form with invite token
 - [ ] A3 Invalid invite → "Link no good"
 - [ ] B1 Magic-link sign-in completes end-to-end

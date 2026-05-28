@@ -23,7 +23,7 @@ const dmMono = DM_Mono({
 export const metadata: Metadata = {
   title: "Kickoff '26 — World Cup prediction league",
   description:
-    "Predict every match of the 2026 World Cup with your friends. Sticker album for fixtures.",
+    "Predict every match of the 2026 World Cup with your friends. A friends-only prediction league: 1X2 picks, knockout bracket, tournament props.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
