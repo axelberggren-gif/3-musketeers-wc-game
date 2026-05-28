@@ -77,7 +77,33 @@ export function predictedGroupStandings(
 
 export type Qualifier = { slot: string; teamId: string };
 
+export type BracketSlotMatchPair = {
+  homeTeamId: string;
+  awayTeamId: string;
+};
+
 export const R32_SLOT_COUNT = 16;
+
+/**
+ * Drop suggestions whose team isn't part of the real match for that slot.
+ *
+ * Pre-group-stage-end the `slotMatches` map is empty and every suggestion passes
+ * through. Once football-data lands R32 matches (`syncFixtures()` derives
+ * `bracket_slot = R32-1..R32-16`), a suggestion of "Brazil wins R32-3" only
+ * survives if Brazil is one of the two teams in the R32-3 match — otherwise the
+ * bulk upsert would write a stale pick the user can't toggle via the
+ * `MatchSlotPicker` tile UI (only the two real teams are shown).
+ */
+export function filterSuggestionsByMatchPairs(
+  suggestions: Qualifier[],
+  slotMatches: Record<string, BracketSlotMatchPair>,
+): Qualifier[] {
+  return suggestions.filter((q) => {
+    const match = slotMatches[q.slot];
+    if (!match) return true;
+    return match.homeTeamId === q.teamId || match.awayTeamId === q.teamId;
+  });
+}
 
 export function suggestR32Qualifiers(
   standings: GroupStanding[],
