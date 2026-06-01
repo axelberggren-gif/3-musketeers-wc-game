@@ -40,7 +40,7 @@ export function MatchPickCard({ match, initialPick, locked }: Props) {
     setPick(next);
     setError(null);
     startTransition(async () => {
-      const result = await setMatchPick(match.id, next ?? value);
+      const result = await setMatchPick(match.id, next);
       if (!result.ok) {
         setPick(previous);
         setError(result.error);
