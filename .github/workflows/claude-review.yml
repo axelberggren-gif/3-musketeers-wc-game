@@ -22,9 +22,9 @@ jobs:
       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
       - uses: anthropics/claude-code-action@v1
         with:
@@ -33,11 +33,19 @@ jobs:
           # API key. Usage counts against the subscription's included limits.
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          # The action's default tool allowlist excludes every `gh` Bash command
+          # and every PR-write tool. Without this list, Claude can read the diff
+          # but cannot post a review — which is exactly what happened on PRs #55
+          # and #58 (action ran for minutes, drafted a review, posted nothing).
+          claude_args: |
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr review:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Glob,Grep"
           prompt: |
-            You are reviewing PR #${{ github.event.pull_request.number }} on
-            ${{ github.repository }}. Before reading the diff, read AGENTS.md and
-            any per-directory CLAUDE.md files for areas the PR touches — those are
-            the canonical source of project invariants.
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            You are reviewing this pull request. Before reading the diff, read
+            AGENTS.md and any per-directory CLAUDE.md files for areas the PR
+            touches — those are the canonical source of project invariants.
 
             ## Block (REQUEST_CHANGES) on
 
@@ -84,17 +92,24 @@ jobs:
 
             ## How to deliver the verdict
 
-            After your analysis, submit ONE review on the PR using the GitHub
-            tools available to you:
-            - **Approve** (`event: APPROVE`) if no blocking issues. Body can be
-              brief — a sentence or two summarising what you checked.
-            - **Request changes** (`event: REQUEST_CHANGES`) if any blocker is
-              present. Body lists each blocker with file:line references and
-              suggests the fix. Use inline comments for line-specific issues.
+            Use `mcp__github_inline_comment__create_inline_comment` (with
+            `confirmed: true`) for line-specific issues — one inline comment per
+            blocker, anchored to the offending line.
 
-            Do not leave a `COMMENT`-only review — the gate step below reads the
-            review state to decide whether this check passes. A `COMMENT` or
-            missing review fails the gate.
+            Then submit exactly one formal review via the `gh` CLI with a body
+            summarising your findings:
+
+            - If no blockers:
+              `gh pr review ${{ github.event.pull_request.number }} --approve --body "<summary>"`
+
+            - If at least one blocker:
+              `gh pr review ${{ github.event.pull_request.number }} --request-changes --body "<summary>"`
+
+            The gate step below reads the formal review's state (APPROVED /
+            CHANGES_REQUESTED) and uses it to pass or fail this check. A
+            missing review or a `COMMENT`-only review fails the gate. Do not
+            output the review text as a chat message — only post via `gh pr
+            review`.
 
       - name: Gate on bot verdict
         # Run even if the action step itself errored — we want a clear pass/fail
