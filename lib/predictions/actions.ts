@@ -25,16 +25,27 @@ async function getLocks() {
   return computeLockState(data);
 }
 
-export async function setMatchPick(matchId: string, pick: Pick1X2) {
+export async function setMatchPick(matchId: string, pick: Pick1X2 | null) {
   const { supabase, user } = await authedClient();
   const locks = await getLocks();
   if (locks.round1Locked) {
     return { ok: false, error: "Round 1 picks are locked." } as const;
   }
-  const { error } = await supabase
-    .from("match_predictions")
-    .upsert({ user_id: user.id, match_id: matchId, pick }, { onConflict: "user_id,match_id" });
-  if (error) return { ok: false, error: error.message } as const;
+  if (pick == null) {
+    // Re-tapping the selected tile clears the pick — delete the row so UI and
+    // DB agree (mirrors setGroupWinnerPick's null path).
+    const { error } = await supabase
+      .from("match_predictions")
+      .delete()
+      .eq("user_id", user.id)
+      .eq("match_id", matchId);
+    if (error) return { ok: false, error: error.message } as const;
+  } else {
+    const { error } = await supabase
+      .from("match_predictions")
+      .upsert({ user_id: user.id, match_id: matchId, pick }, { onConflict: "user_id,match_id" });
+    if (error) return { ok: false, error: error.message } as const;
+  }
   revalidatePath("/predict");
   return { ok: true } as const;
 }
