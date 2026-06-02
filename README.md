@@ -40,12 +40,19 @@ For local dev, skip migration 0003 — trigger sync manually from `/admin/sync`.
 1. Register at https://www.football-data.org/client/register — free tier covers the World Cup.
 2. Copy the API token → `FOOTBALL_DATA_TOKEN`.
 
-### 4. Set up auth email (recommended)
+### 4. Set up auth email with Resend (recommended)
 
-Supabase's default magic-link sender lands in spam for many providers. Wire up real SMTP:
+Supabase's built-in email sender is heavily rate-limited (only a few messages/hour) and often lands in spam — fine for a quick test, not for onboarding real users. Route auth emails through Resend's SMTP (free plan: 3,000/month, 100/day):
 
-- Create a free account at https://resend.com, verify a sending domain.
-- Supabase dashboard → **Authentication → Emails → SMTP Settings** → paste Resend SMTP creds.
+1. Create a free account at https://resend.com and **verify a sending domain** (add the SPF + DKIM DNS records Resend gives you). Without a verified domain you can only email your own account address.
+2. Resend → **API Keys** → create a key (`re_…`).
+3. Supabase dashboard → **Authentication → Emails → SMTP Settings** → enable custom SMTP:
+   - Host `smtp.resend.com` · Port `465`
+   - Username `resend`
+   - Password: the Resend API key
+   - Sender: `noreply@<your-verified-domain>` (+ a sender name)
+4. Supabase → **Authentication → Emails → Templates → "Magic Link"**: set the body to show the 6-digit code via `{{ .Token }}` (sign-in uses a 6-digit email code, not a clickable link).
+5. Supabase → **Authentication → Rate Limits**: raise the email rate limit (the built-in cap stays low even with custom SMTP).
 
 ### 5. Configure environment variables
 
@@ -82,7 +89,7 @@ Open http://localhost:3000.
 
 1. `/leagues` → **Create a league**.
 2. `/leagues/[slug]/members` → **New invite** → copy the link.
-3. Send link to friends. They open it → enter email → magic link → they're in the league.
+3. Send link to friends. They open it → enter email → 6-digit code → they're in the league.
 
 ## Project structure
 
@@ -91,7 +98,7 @@ app/
   (app)/                 # authenticated routes (predict, leagues, match, profile, admin)
   (auth)/                # login + join/[token]
   api/cron/              # cron endpoints called by pg_cron
-  auth/callback/         # magic-link callback
+  auth/callback/         # legacy auth callback (sign-in is code-based)
   page.tsx               # landing
 components/
   predict/               # MatchPickCard, BracketBuilder, TournamentForm, CountdownBanner
