@@ -10,8 +10,6 @@ export default async function LoginPage() {
   } = await supabase.auth.getUser();
   if (user) redirect("/leagues");
 
-  const devInstant = process.env.DEV_INSTANT_LOGIN === "true";
-
   return (
     <main className="flex-1 flex items-center justify-center px-4 py-12 sm:py-20">
       <div className="w-full max-w-md flex flex-col gap-5">
@@ -27,19 +25,17 @@ export default async function LoginPage() {
             className="badge badge-coral self-start -rotate-2"
             style={{ boxShadow: "3px 3px 0 var(--ink)" }}
           >
-            {devInstant ? "Dev · instant login" : "No passwords · Magic link"}
+            No passwords · Magic link
           </span>
           <div className="flex flex-col gap-1.5">
             <h1 className="font-display uppercase text-3xl sm:text-4xl leading-none tracking-tight">
               Sign in
             </h1>
             <p className="text-sm text-ink-soft">
-              {devInstant
-                ? "Enter an existing user's email to log in instantly."
-                : "We'll email you a magic link. Click it and you're in."}
+              We&apos;ll email you a magic link. Click it and you&apos;re in.
             </p>
           </div>
-          <LoginForm devInstant={devInstant} />
+          <LoginForm />
         </div>
         <div className="card !p-4 text-sm flex items-center justify-between gap-3">
           <span className="text-ink-soft">Got an invite link?</span>

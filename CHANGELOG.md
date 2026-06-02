@@ -54,6 +54,7 @@ After committing your change, run `git commit --amend --no-edit` once to backfil
 - 2026-05-19 (`pending`) Invite redemption race (concurrent joins could exceed `max_uses`) replaced with atomic `redeem_league_invite` RPC — @?
 
 ### Removed
+- 2026-06-02 (`pending`) `DEV_INSTANT_LOGIN` instant-login bypass removed entirely ahead of production onboarding — magic-link via `signInWithOtp` is now the only sign-in path. `lib/auth/signIn.ts` dropped its dev branch (which used `supabaseService().auth.admin.generateLink` + server-side `verifyOtp` to log in as any existing user by email) along with the now-unused `supabaseService` / `consumeInviteForUser` imports and the `mode: "instant"` `SignInResult` variant. `(auth)/login/page.tsx`, `(auth)/join/[token]/page.tsx`, and `login/LoginForm.tsx` lost the `devInstant` prop and its badge / helper-text / button-label branches; the dead `window.location.href` instant-redirect path in `LoginForm` is gone. Kills the P0 production foot-gun documented in `CODE_REVIEW.md` §2 (env-var leak → impersonate any user by email). NOTE: the `DEV_INSTANT_LOGIN=` line in `.env.example` still needs removing manually — it's harness-protected and couldn't be edited from this session — @ax
 - 2026-05-26 (`820d572`) `unwrapRelation()` helper (added in #4) deleted from `lib/utils.ts` and dropped from all 10 call sites. The new `<Database>`-typed clients in #14 give supabase-js enough FK metadata to type single-FK embedded relations as `T | null` directly, so the `Array.isArray(x) ? x[0] : x` workaround is now unnecessary — @ax
 
 ### Infra

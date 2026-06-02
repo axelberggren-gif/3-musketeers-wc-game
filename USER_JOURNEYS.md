@@ -125,8 +125,8 @@ flowchart TD
 
 ## B — Authentication
 
-### B1. Sign in via magic link (production mode)  (`app/(auth)/login/page.tsx`, `lib/auth/signIn.ts`)
-- Open `/login` in incognito (env `DEV_INSTANT_LOGIN` unset).
+### B1. Sign in via magic link  (`app/(auth)/login/page.tsx`, `lib/auth/signIn.ts`)
+- Open `/login` in incognito.
 - Verify badge "No passwords · Magic link".
 - Submit email → button label flips to **Sending…** then **✓ Magic link sent**.
 - Verify the inline tip "We sent a link to <email>" appears with the typed address.
@@ -134,23 +134,17 @@ flowchart TD
 - Click the link → redirected to `/auth/callback` then to `/leagues`.
 - Confirm Nav bar appears with **Round 1 / Bracket / Leagues** links.
 
-### B2. Sign in via DEV_INSTANT_LOGIN  (`lib/auth/signIn.ts:DEV path`)
-- Set env `DEV_INSTANT_LOGIN=true`. Open `/login`.
-- Verify badge text reads "Dev · instant login" and helper "Email must already exist in Supabase".
-- Enter an existing user's email → button shows **Signing in…**, then a hard `window.location.href` redirect to `/leagues` (or to `/leagues/<slug>` if an `inviteToken` was attached).
-- Try with a non-existent email → inline red error "No user with that email. Create one in Supabase → Authentication → Users first." appears.
-
-### B3. Magic-link callback edge cases  (`app/auth/callback/route.ts`)
+### B2. Magic-link callback edge cases  (`app/auth/callback/route.ts`)
 - Magic-link with no `code` param → redirects to `/login` (no error).
 - Magic-link with invalid/expired `code` → redirects to `/login?error=<msg>` (verify the message is rendered if a UI surfaces it — currently it is in the URL only).
 - Magic-link with `?invite=<token>` → after exchanging the code, bounces through `/join/<token>` to redeem; the user lands on the league or sees the error state.
 
-### B4. Sign out  (`components/SignOutButton.tsx`)
+### B3. Sign out  (`components/SignOutButton.tsx`)
 - Authenticated, click **Sign out** in the Nav.
 - Supabase `signOut()` is called, router refreshes, then pushes to `/`.
 - Confirm visiting any `/leagues`, `/predict`, `/admin` URL now redirects to `/login`.
 
-### B5. Authenticated user opens `/login` or `/`
+### B4. Authenticated user opens `/login` or `/`
 - Both routes detect the session and redirect to `/leagues`.
 
 ---
@@ -222,7 +216,7 @@ flowchart TD
 
 ## D — Invite redemption
 
-### D1. Anonymous → join via invite  (covered in A2 + B1/B2)
+### D1. Anonymous → join via invite  (covered in A2 + B1)
 - Verify the magic link sent from `/join/<token>` includes `?invite=<token>` so callback redirects to `/join/<token>` after auth.
 
 ### D2. Already-authenticated user opens an invite link
@@ -418,9 +412,8 @@ Tick when verified. Each row corresponds to a journey above.
 - [ ] A2 Valid invite (anon) → login form with invite token
 - [ ] A3 Invalid invite → "Link no good"
 - [ ] B1 Magic-link sign-in completes end-to-end
-- [ ] B2 DEV instant sign-in works (when env on)
-- [ ] B3 Magic-link with `?invite=` round-trips to league
-- [ ] B4 Sign out clears session and bounces to `/`
+- [ ] B2 Magic-link with `?invite=` round-trips to league
+- [ ] B3 Sign out clears session and bounces to `/`
 - [ ] C1 Empty leagues page shows hint card
 - [ ] C2 Create league succeeds, owner row inserted
 - [ ] C3 League home shows Top 5 / upcoming / recent
