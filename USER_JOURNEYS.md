@@ -125,16 +125,17 @@ flowchart TD
 
 ## B — Authentication
 
-### B1. Sign in via magic link  (`app/(auth)/login/page.tsx`, `lib/auth/signIn.ts`)
+### B1. Sign in via email code  (`app/(auth)/login/page.tsx`, `lib/auth/signIn.ts`, `LoginForm.tsx`)
 - Open `/login` in incognito.
-- Verify badge "No passwords · Magic link".
-- Submit email → button label flips to **Sending…** then **✓ Magic link sent**.
-- Verify the inline tip "We sent a link to <email>" appears with the typed address.
-- Open the email; verify the link URL points to `/auth/callback?code=...`.
-- Click the link → redirected to `/auth/callback` then to `/leagues`.
+- Verify badge "No passwords · Email code".
+- Submit email → **Email me a code** flips to **Sending…**, then the form swaps to the code step with a "✓ Code sent" badge.
+- Check the inbox; the email contains a 6-digit code (Supabase `{{ .Token }}`).
+- Enter the code → **Verify & sign in** → **Verifying…** → hard `window.location.href` redirect to `/leagues` (or `/leagues/<slug>` when an invite token rode along).
+- Wrong/expired code → inline red error from `verifyOtp`; **Use a different email** resets to the email step.
 - Confirm Nav bar appears with **Round 1 / Bracket / Leagues** links.
 
-### B2. Magic-link callback edge cases  (`app/auth/callback/route.ts`)
+### B2. Legacy magic-link callback edge cases  (`app/auth/callback/route.ts`)
+> Secondary path — sign-in is code-based now (B1). The callback only fires if a residual link in the email is clicked.
 - Magic-link with no `code` param → redirects to `/login` (no error).
 - Magic-link with invalid/expired `code` → redirects to `/login?error=<msg>` (verify the message is rendered if a UI surfaces it — currently it is in the URL only).
 - Magic-link with `?invite=<token>` → after exchanging the code, bounces through `/join/<token>` to redeem; the user lands on the league or sees the error state.
