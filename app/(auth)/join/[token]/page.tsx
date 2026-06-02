@@ -99,10 +99,7 @@ export default async function JoinPage({
               </p>
             </div>
           ) : (
-            <LoginForm
-              inviteToken={token}
-              devInstant={process.env.DEV_INSTANT_LOGIN === "true"}
-            />
+            <LoginForm inviteToken={token} />
           )}
         </div>
       </div>

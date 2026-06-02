@@ -5,10 +5,8 @@ import { signInWithEmail } from "@/lib/auth/signIn";
 
 export function LoginForm({
   inviteToken,
-  devInstant,
 }: {
   inviteToken?: string;
-  devInstant?: boolean;
 }) {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
@@ -22,10 +20,6 @@ export function LoginForm({
     if (!result.ok) {
       setError(result.error);
       setStatus("error");
-      return;
-    }
-    if (result.mode === "instant") {
-      window.location.href = result.url;
       return;
     }
     setStatus("sent");
@@ -66,20 +60,9 @@ export function LoginForm({
       />
       {error && <p className="text-sm text-red font-medium">{error}</p>}
       <button type="submit" disabled={status === "sending"} className="btn btn-primary mt-1">
-        {status === "sending"
-          ? devInstant
-            ? "Signing in…"
-            : "Sending…"
-          : devInstant
-            ? "Sign in (dev)"
-            : "Send magic link"}
+        {status === "sending" ? "Sending…" : "Send magic link"}
       </button>
-      {devInstant && (
-        <p className="text-xs text-pitch font-medium">
-          Dev mode: email must already exist in Supabase. No magic link is sent.
-        </p>
-      )}
-      {!inviteToken && !devInstant && (
+      {!inviteToken && (
         <p className="text-xs text-ink-soft mt-1">
           Don&rsquo;t have an account? Ask a league owner for an invite link.
         </p>

@@ -23,8 +23,7 @@ export async function GET(request: NextRequest) {
 
   if (inviteToken) {
     // Bounce through /join/[token] so the single redemption code path
-    // handles success (redirect to league) and failure (visible error)
-    // uniformly across magic-link and DEV_INSTANT_LOGIN flows.
+    // handles success (redirect to league) and failure (visible error).
     return NextResponse.redirect(`${origin}/join/${inviteToken}`);
   }
 
