@@ -1,0 +1,58 @@
+name: agent-analytics
+
+# Live + scheduled agent-analytics reporting. Recomputes the four-quadrant report
+# from git + GitHub history and upserts a single tracking issue.
+#
+# It deliberately COMMITS NOTHING: `main` is branch-protected (direct pushes are
+# rejected), and the report is cheap to recompute, so there is no stored state to
+# maintain. Runs weekly, on every merged PR (so the issue is fresh right after each
+# landing), and on manual dispatch.
+
+on:
+  schedule:
+    - cron: "0 8 * * 1" # Mondays 08:00 UTC
+  workflow_dispatch: {}
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  report:
+    # On PR events, only run for MERGED PRs (skip plain closes).
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.merged == true }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history for the backfill miner
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # No `npm ci` — the analytics scripts use only Node built-ins.
+      - name: Generate four-quadrant report
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} # enables `gh api` enrichment in report.mjs
+        run: |
+          since=$(date -u -d '60 days ago' +%Y-%m-%d)
+          node analytics/scripts/report.mjs --since "$since" > /tmp/agent-report.md
+          cat /tmp/agent-report.md
+
+      - name: Upsert tracking issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          title="Agent analytics — four-quadrant report"
+          existing=$(gh issue list --state open --search "$title in:title" \
+            --json number,title --jq "map(select(.title == \"$title\")) | .[0].number // empty")
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --body-file /tmp/agent-report.md
+            echo "Updated issue #$existing"
+          else
+            gh issue create --title "$title" --body-file /tmp/agent-report.md --label "area:infra"
+          fi

@@ -43,3 +43,7 @@ next-env.d.ts
 
 # per-developer Claude Code identity (initials + name for branch names / CHANGELOG)
 /.claude-identity
+
+# agent analytics — local-only session telemetry + personal (opt-in) hook config
+/analytics/events/local.ndjson
+/.claude/settings.local.json
