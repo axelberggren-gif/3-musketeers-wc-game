@@ -10,6 +10,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "db:types": "supabase gen types typescript --local > lib/supabase/types.ts",
+    "agent:backfill": "node analytics/scripts/backfill.mjs",
+    "agent:report": "node analytics/scripts/report.mjs",
+    "agent:evals": "node analytics/scripts/correction-to-eval.mjs",
     "prepare": "husky"
   },
   "dependencies": {

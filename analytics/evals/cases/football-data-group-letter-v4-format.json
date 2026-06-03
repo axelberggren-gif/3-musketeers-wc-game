@@ -1,0 +1,12 @@
+{
+  "eval_id": "football-data-group-letter-v4-format",
+  "event_type": "user_correction_submitted",
+  "dimension": "quality",
+  "scenario": "syncFixtures() parses the group label from a football-data v4 match payload, where the field is 'GROUP_A'..'GROUP_L' (uppercase, underscore — matching the stage enum convention).",
+  "agent_behavior_observed": "Used m.group.replace('Group ', '').slice(0, 1), a no-op on 'GROUP_A' that returns 'G' for every group, so every team was tagged group G.",
+  "expected_behavior": "Parse the trailing letter from the 'GROUP_X' format (accepting the legacy 'Group X' form too) and validate it is A-L.",
+  "assertion": "parseGroupLetter('GROUP_A') === 'A' && parseGroupLetter('GROUP_L') === 'L' && parseGroupLetter('Group B') === 'B'",
+  "severity": "major",
+  "workflow_type": "football-data",
+  "notes": "Recurring class: assuming a legacy API string shape. Caught post-merge; recovery path was the backfill_team_group_letters RPC in migration 0010."
+}

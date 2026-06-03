@@ -47,6 +47,7 @@ when they touch the corresponding area.
 @supabase/migrations/CLAUDE.md
 @components/predict/CLAUDE.md
 @components/banter/CLAUDE.md
+@analytics/CLAUDE.md
 
 ## Global invariants (do not break)
 

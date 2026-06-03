@@ -1,0 +1,12 @@
+{
+  "eval_id": "supabase-rls-no-self-referential-policy",
+  "event_type": "user_correction_submitted",
+  "dimension": "safety",
+  "scenario": "Writing an RLS policy on league_members (or leagues) that must check membership of the same league.",
+  "agent_behavior_observed": "Wrote a policy whose USING clause EXISTS-subqueries back into the same table it gates, hitting Postgres' RLS recursion-breaker and hiding freshly-created rows (the league-creation 404 saga, fixed across follow-up migrations 0006-0008).",
+  "expected_behavior": "Resolve membership through a SECURITY DEFINER helper (is_league_member) that bypasses RLS, instead of EXISTS-ing into the gated table.",
+  "assertion": "RLS policies on league_members contain no EXISTS subquery selecting from league_members; membership checks route through a SECURITY DEFINER function.",
+  "severity": "critical",
+  "workflow_type": "supabase",
+  "notes": "Cost four review rounds (#24-#31). Highest-value regression guard for the supabase workflow, which the report flags as Q2."
+}
