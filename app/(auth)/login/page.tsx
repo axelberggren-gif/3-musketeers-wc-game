@@ -25,14 +25,15 @@ export default async function LoginPage() {
             className="badge badge-coral self-start -rotate-2"
             style={{ boxShadow: "3px 3px 0 var(--ink)" }}
           >
-            No passwords · Magic link
+            No passwords · Email code
           </span>
           <div className="flex flex-col gap-1.5">
             <h1 className="font-display uppercase text-3xl sm:text-4xl leading-none tracking-tight">
               Sign in
             </h1>
             <p className="text-sm text-ink-soft">
-              We&apos;ll email you a magic link. Click it and you&apos;re in.
+              We&apos;ll email you a login code. Type it in to sign in — or click the magic link in
+              the same email.
             </p>
           </div>
           <LoginForm />
