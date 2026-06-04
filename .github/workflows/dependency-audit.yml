@@ -1,0 +1,27 @@
+name: dependency-audit
+
+# Free, private-repo-friendly replacement for GitHub's dependency-review action
+# (which needs paid Advanced Security on private repos). Fails the check when a
+# dependency has a known high/critical advisory. Dependabot (.github/dependabot.yml)
+# does the actual upgrades; this is the gate. Tune the level with --audit-level.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+      # Reads package-lock.json against the npm advisory DB — no install needed.
+      # high + critical fail; moderate/low are reported but non-blocking.
+      - run: npm audit --audit-level=high

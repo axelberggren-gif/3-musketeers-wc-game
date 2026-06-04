@@ -421,18 +421,19 @@
       </div>
 
       <div class="card">
-        <h3><span class="chip ci">CI</span> Dependency review</h3>
-        <p>Blocks PRs that pull in a known-vulnerable dependency (high/critical) or a disallowed license, and surfaces
-           OpenSSF Scorecard data on changed packages — before the dep ever lands on <code class="mono">main</code>.</p>
-        <div class="files"><span class="file">.github/workflows/dependency-review.yml</span></div>
+        <h3><span class="chip ci">CI</span> Dependency audit</h3>
+        <p><code class="mono">npm audit --audit-level=high</code> fails the check on any high/critical advisory in the
+           dependency tree. Free + private-repo-friendly (GitHub's dependency-review needs paid Advanced Security on
+           private repos). Dependabot does the upgrades; this is the gate.</p>
+        <div class="files"><span class="file">.github/workflows/dependency-audit.yml</span></div>
       </div>
 
       <div class="card">
-        <h3><span class="chip ci">CI</span> CodeQL (SAST)</h3>
-        <p>GitHub's static analysis scans JS/TS on every PR, push, and weekly schedule for injection, XSS, and unsafe
-           data flow — a <em>deterministic</em> security backstop to the (non-deterministic) AI review bot. Findings land
-           in the Security tab.</p>
-        <div class="files"><span class="file">.github/workflows/codeql.yml</span></div>
+        <h3><span class="chip ci">CI</span> Semgrep (SAST)</h3>
+        <p>Semgrep OSS scans JS/TS for injection, XSS, and unsafe data flow — a <em>deterministic</em> backstop to the
+           (non-deterministic) AI review bot. Free + private-safe (scans locally, uploads nothing); on PRs it gates only
+           on newly-introduced findings via a baseline diff.</p>
+        <div class="files"><span class="file">.github/workflows/semgrep.yml</span></div>
       </div>
 
       <div class="card">

@@ -1,0 +1,33 @@
+name: semgrep
+
+# Free, private-repo-friendly SAST, replacing GitHub CodeQL (which needs paid
+# Advanced Security on private repos). Semgrep OSS scans locally and uploads no
+# code. On PRs it fails only on findings *introduced by the PR* (baseline diff),
+# so it never blocks on pre-existing issues; pushes to main run a full,
+# informational scan. semgrep is pinned; bump the version manually (pipx isn't a
+# Dependabot ecosystem). Rulesets are fetched fresh from the registry per run.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  semgrep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0 # full history so the PR baseline diff resolves
+      - name: Install Semgrep (pinned)
+        run: pipx install semgrep==1.165.0
+      - name: Scan PR — fail only on newly-introduced findings
+        if: github.event_name == 'pull_request'
+        run: semgrep scan --config p/default --config p/typescript --error --metrics=off --baseline-commit "${{ github.event.pull_request.base.sha }}"
+      - name: Scan main — full, informational
+        if: github.event_name == 'push'
+        run: semgrep scan --config p/default --config p/typescript --metrics=off
