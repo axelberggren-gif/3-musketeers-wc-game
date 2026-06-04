@@ -283,11 +283,12 @@
     <p class="lede">
       A friends-only World Cup 2026 betting league, <strong>built almost entirely by AI agents</strong>.
       Because no human owns any file, the project leans on layered, automated guardrails to keep
-      agents honest: a CI gate, an AI review bot, a meta-analytics loop that grades the agents themselves,
-      and a web of invariants enforced in the database, the build, and at commit time.
+      agents honest: a CI gate, an AI review bot, deterministic supply-chain &amp; security scanning,
+      a meta-analytics loop that grades the agents themselves, and a web of invariants enforced in
+      the database, the build, and at commit time.
     </p>
     <div class="stat-row">
-      <div class="stat"><b>6</b><span>GitHub workflows</span></div>
+      <div class="stat"><b>9</b><span>GitHub workflows</span></div>
       <div class="stat"><b>3</b><span>required PR checks</span></div>
       <div class="stat"><b>5</b><span>test suites (vitest)</span></div>
       <div class="stat"><b>10</b><span>canon CLAUDE.md docs</span></div>
@@ -364,9 +365,9 @@
   <section id="ci">
     <div class="sec-head">
       <div class="sec-num">02</div>
-      <h2 class="sec-title display">Continuous integration</h2>
+      <h2 class="sec-title display">Continuous integration &amp; supply-chain security</h2>
     </div>
-    <p class="sec-sub">Automated checks that run on every pull request and every push to <code class="mono">main</code>.</p>
+    <p class="sec-sub">Automated checks on every pull request and push to <code class="mono">main</code> — the build loop, plus the deterministic supply-chain and security-scanning layer added June 2026.</p>
 
     <div class="grid">
       <div class="card">
@@ -401,6 +402,45 @@
            gated on <code class="mono">author_association ∈ {OWNER, MEMBER, COLLABORATOR}</code> so a drive-by fork
            can never trigger a merge.</p>
         <div class="files"><span class="file">.github/workflows/auto-merge.yml</span></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip ci">CI</span> SHA-pinned actions</h3>
+        <p>Every <code class="mono">uses:</code> across all nine workflows is pinned to a full 40-char commit SHA
+           (with a <code class="mono"># v4</code> comment), never a mutable tag. Closes the supply-chain hole behind
+           the 2025 <em>tj-actions</em> and 2026 <em>trivy-action</em> tag-hijack attacks that exfiltrated CI secrets.</p>
+        <div class="files"><span class="file">.github/workflows/*</span></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip ci">CI</span> Dependabot</h3>
+        <p>Weekly update PRs for both <code class="mono">npm</code> and <code class="mono">github-actions</code> — patches
+           vulnerable deps and bumps the pinned action SHAs so pinning never rots. PR titles carry Conventional-Commits
+           prefixes so they pass <code class="mono">pr-title-lint</code>.</p>
+        <div class="files"><span class="file">.github/dependabot.yml</span></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip ci">CI</span> Dependency review</h3>
+        <p>Blocks PRs that pull in a known-vulnerable dependency (high/critical) or a disallowed license, and surfaces
+           OpenSSF Scorecard data on changed packages — before the dep ever lands on <code class="mono">main</code>.</p>
+        <div class="files"><span class="file">.github/workflows/dependency-review.yml</span></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip ci">CI</span> CodeQL (SAST)</h3>
+        <p>GitHub's static analysis scans JS/TS on every PR, push, and weekly schedule for injection, XSS, and unsafe
+           data flow — a <em>deterministic</em> security backstop to the (non-deterministic) AI review bot. Findings land
+           in the Security tab.</p>
+        <div class="files"><span class="file">.github/workflows/codeql.yml</span></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip ci">CI</span> Secret scanning</h3>
+        <p>gitleaks scans every push and PR for committed credentials — defense in depth over GitHub-native secret
+           scanning + push protection. Catches the documented AI failure mode of hardcoding the Supabase service-role
+           key or <code class="mono">CRON_SECRET</code>.</p>
+        <div class="files"><span class="file">.github/workflows/secret-scan.yml</span></div>
       </div>
     </div>
   </section>
@@ -761,6 +801,78 @@
       guarded by a unit test, the PR checklist, and the review bot. Append-only migrations are an eval case, a review-bot
       block, and a documented invariant. Pick visibility is enforced by DB triggers, RLS policies, <em>and</em> the UI.
       Any one rail can miss without the game breaking.
+    </div>
+  </section>
+
+  <!-- 10. ROADMAP -->
+  <section id="roadmap">
+    <div class="sec-head">
+      <div class="sec-num">10</div>
+      <h2 class="sec-title display">Roadmap — tracked in issues</h2>
+    </div>
+    <p class="sec-sub">
+      Recommended next guardrails from a June 2026 best-practice review, filed as GitHub issues. The deterministic
+      security layer in §02 (SHA pinning, Dependabot, dependency review, CodeQL, secret scanning) has shipped; these
+      deepen test coverage and consistency. Ordered by priority.
+    </p>
+
+    <div class="grid">
+      <div class="card">
+        <h3><span class="chip db">DB</span> pgTAP RLS + scoring tests</h3>
+        <p>The biggest correctness gap: RLS and the SQL scoring functions have <em>zero</em> automated tests, and RLS
+           fails silently. Test pick-visibility before/after kickoff and scoring idempotency via
+           <code class="mono">supabase test db</code>.</p>
+        <div class="files"><a class="file" href="https://github.com/axelberggren-gif/3-musketeers-wc-game/issues/70">#70 · prio:P1</a></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip ci">CI</span> Type-aware ESLint</h3>
+        <p>Add <code class="mono">no-floating-promises</code> (catches un-awaited Supabase calls — silent data bugs) and
+           <code class="mono">eslint-plugin-security</code> on top of the current minimal config.</p>
+        <div class="files"><a class="file" href="https://github.com/axelberggren-gif/3-musketeers-wc-game/issues/74">#74 · prio:P1</a></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip runtime">runtime</span> Cron heartbeat</h3>
+        <p>A dead-man's-switch on <code class="mono">sync-fixtures</code> (the only thing that scores the game) so a
+           silent failure mid-tournament pages someone instead of freezing the league quietly.</p>
+        <div class="files"><a class="file" href="https://github.com/axelberggren-gif/3-musketeers-wc-game/issues/77">#77 · prio:P1</a></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip ci">CI</span> Coverage thresholds</h3>
+        <p>Gate CI on <code class="mono">@vitest/coverage-v8</code> thresholds (≥90% on <code class="mono">lib/scoring</code>)
+           so new untested logic can't slip in.</p>
+        <div class="files"><a class="file" href="https://github.com/axelberggren-gif/3-musketeers-wc-game/issues/71">#71 · prio:P2</a></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip ci">CI</span> Playwright E2E smokes</h3>
+        <p>Integration coverage for the unrecoverable journeys — login, make-a-pick, the lock boundary, leaderboard —
+           documented in <code class="mono">USER_JOURNEYS.md</code>.</p>
+        <div class="files"><a class="file" href="https://github.com/axelberggren-gif/3-musketeers-wc-game/issues/72">#72 · prio:P2</a></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip hook">git&nbsp;hook</span> Prettier + lint-staged</h3>
+        <p>A real formatter (kills diff noise from agents) and a staged-files-only pre-commit so the hook stops linting
+           the whole repo on every commit.</p>
+        <div class="files"><a class="file" href="https://github.com/axelberggren-gif/3-musketeers-wc-game/issues/73">#73 · prio:P2</a></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip ci">CI</span> noUncheckedIndexedAccess</h3>
+        <p>Flip on the one strict-TS flag that's off — forces handling <code class="mono">undefined</code> on the many
+           map/array lookups in scoring + bracket code.</p>
+        <div class="files"><a class="file" href="https://github.com/axelberggren-gif/3-musketeers-wc-game/issues/75">#75 · prio:P2</a></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip hook">git&nbsp;hook</span> Co-author trailer hook</h3>
+        <p>A <code class="mono">commit-msg</code> hook that enforces the AGENTS.md-mandated
+           <code class="mono">Co-authored-by: Claude</code> trailer the analytics attribution relies on.</p>
+        <div class="files"><a class="file" href="https://github.com/axelberggren-gif/3-musketeers-wc-game/issues/76">#76 · prio:P2</a></div>
+      </div>
     </div>
   </section>
 
