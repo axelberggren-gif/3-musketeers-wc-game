@@ -755,6 +755,7 @@ export type Database = {
           display_name: string | null;
           avatar_url: string | null;
           is_admin: boolean;
+          onboarded: boolean;
           created_at: string;
         };
         Insert: {
@@ -763,6 +764,7 @@ export type Database = {
           display_name?: string | null;
           avatar_url?: string | null;
           is_admin?: boolean;
+          onboarded?: boolean;
           created_at?: string;
         };
         Update: {
@@ -771,6 +773,7 @@ export type Database = {
           display_name?: string | null;
           avatar_url?: string | null;
           is_admin?: boolean;
+          onboarded?: boolean;
           created_at?: string;
         };
         Relationships: [];

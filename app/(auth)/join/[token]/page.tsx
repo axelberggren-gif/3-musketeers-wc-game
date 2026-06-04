@@ -42,7 +42,19 @@ export default async function JoinPage({
   let joinError: string | null = null;
   if (user) {
     const result = await consumeInviteForUser(token, user.id);
-    if (result.ok) redirect(`/leagues/${result.league_slug}`);
+    if (result.ok) {
+      const leaguePath = `/leagues/${result.league_slug}`;
+      // New users pick a username first, then land back in this league.
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("onboarded")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (!profile || !profile.onboarded) {
+        redirect(`/welcome?next=${encodeURIComponent(leaguePath)}`);
+      }
+      redirect(leaguePath);
+    }
     joinError = result.error;
   }
 
