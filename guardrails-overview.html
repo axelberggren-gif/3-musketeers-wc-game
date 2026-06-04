@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Guardrails &amp; Checks — 3 Musketeers WC Bet Game</title>
+<style>
+  :root {
+    --paper: #f4ecdc;
+    --paper-2: #ede2ca;
+    --ink: #0e1118;
+    --ink-soft: #4a5063;
+    --pitch: #0e8a4d;
+    --pitch-light: #7bc890;
+    --gold: #ffc043;
+    --coral: #ff6b5b;
+    --white: #fffdf8;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background-color: var(--paper);
+    background-image:
+      radial-gradient(rgba(14, 17, 24, 0.06) 1px, transparent 1.5px),
+      radial-gradient(rgba(14, 17, 24, 0.06) 1px, transparent 1.5px);
+    background-size: 14px 14px, 14px 14px;
+    background-position: 0 0, 7px 7px;
+    color: var(--ink);
+    font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.55;
+  }
+
+  .display {
+    font-family: "Archivo Black", "Arial Black", "Helvetica Neue", sans-serif;
+    font-weight: 900;
+    letter-spacing: -0.01em;
+    line-height: 1.05;
+  }
+
+  .mono {
+    font-family: "DM Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  .wrap { max-width: 1140px; margin: 0 auto; padding: 0 20px; }
+
+  /* ---------- Hero ---------- */
+  header.hero {
+    padding: 64px 0 36px;
+  }
+  .kicker {
+    display: inline-block;
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    background: var(--ink);
+    color: var(--gold);
+    padding: 6px 12px;
+    border-radius: 999px;
+    margin-bottom: 18px;
+  }
+  h1.title {
+    font-size: clamp(34px, 6vw, 60px);
+    margin: 0 0 14px;
+  }
+  h1.title .hl { color: var(--pitch); }
+  .lede {
+    font-size: 18px;
+    max-width: 720px;
+    color: var(--ink-soft);
+    margin: 0 0 26px;
+  }
+  .lede strong { color: var(--ink); }
+
+  .stat-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-top: 8px;
+  }
+  .stat {
+    background: var(--white);
+    border: 2.5px solid var(--ink);
+    border-radius: 14px;
+    box-shadow: 4px 4px 0 var(--ink);
+    padding: 14px 18px;
+    min-width: 120px;
+  }
+  .stat b { display: block; font-size: 28px; }
+  .stat span { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-soft); }
+
+  /* ---------- Section ---------- */
+  section { padding: 30px 0; }
+  .sec-head {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 6px;
+  }
+  .sec-num {
+    font-family: "Archivo Black", "Arial Black", sans-serif;
+    font-weight: 900;
+    font-size: 15px;
+    background: var(--gold);
+    color: var(--ink);
+    border: 2.5px solid var(--ink);
+    border-radius: 10px;
+    box-shadow: 3px 3px 0 var(--ink);
+    width: 42px; height: 42px;
+    display: grid; place-items: center;
+    flex: none;
+  }
+  h2.sec-title { font-size: clamp(22px, 3.4vw, 30px); margin: 0; }
+  .sec-sub { color: var(--ink-soft); margin: 4px 0 22px 56px; max-width: 760px; }
+
+  /* ---------- Card grid ---------- */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 18px;
+  }
+  .card {
+    background: var(--white);
+    border: 2.5px solid var(--ink);
+    border-radius: 16px;
+    box-shadow: 5px 5px 0 var(--ink);
+    padding: 20px 20px 18px;
+    display: flex;
+    flex-direction: column;
+    transition: transform .12s ease, box-shadow .12s ease;
+  }
+  .card:hover { transform: translate(-2px, -2px); box-shadow: 7px 7px 0 var(--ink); }
+  .card h3 {
+    font-size: 17px;
+    margin: 0 0 8px;
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+  }
+  .card p { margin: 0 0 12px; font-size: 14.5px; color: #23272f; }
+  .card p:last-of-type { margin-bottom: 0; }
+  .file {
+    font-family: "DM Mono", ui-monospace, monospace;
+    font-size: 12px;
+    background: var(--paper-2);
+    border: 1.5px solid var(--ink);
+    border-radius: 6px;
+    padding: 1px 6px;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+  .files { margin-top: auto; padding-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; }
+
+  /* ---------- Chips ---------- */
+  .chip {
+    display: inline-block;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 3px 9px;
+    border-radius: 999px;
+    border: 2px solid var(--ink);
+    white-space: nowrap;
+  }
+  .chip.ci      { background: var(--pitch); color: #fff; }
+  .chip.ai      { background: var(--gold); color: var(--ink); }
+  .chip.hook    { background: var(--coral); color: var(--ink); }
+  .chip.db      { background: #2b2f3a; color: var(--gold); }
+  .chip.docs    { background: var(--paper-2); color: var(--ink); }
+  .chip.runtime { background: var(--pitch-light); color: var(--ink); }
+
+  /* ---------- Pipeline / flow ---------- */
+  .flow {
+    background: var(--ink);
+    border-radius: 18px;
+    border: 2.5px solid var(--ink);
+    box-shadow: 6px 6px 0 rgba(14,17,24,.35);
+    padding: 26px 22px;
+    color: var(--paper);
+    margin-top: 8px;
+  }
+  .flow h3 { color: var(--gold); margin: 0 0 18px; font-size: 16px; letter-spacing: .04em; text-transform: uppercase; }
+  .pipeline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .node {
+    flex: 1 1 150px;
+    background: #1b1f2a;
+    border: 2px solid #3a4150;
+    border-radius: 12px;
+    padding: 12px 14px;
+  }
+  .node.gate { border-color: var(--gold); }
+  .node.ship { border-color: var(--pitch-light); background: #16321f; }
+  .node .n-top { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--pitch-light); margin-bottom: 4px; }
+  .node.gate .n-top { color: var(--gold); }
+  .node b { display: block; font-size: 14px; color: var(--white); margin-bottom: 3px; }
+  .node small { color: #aab2c2; font-size: 12px; }
+  .arrow { align-self: center; color: var(--gold); font-weight: 900; font-size: 20px; }
+  .req {
+    margin-top: 16px;
+    font-size: 13px;
+    color: #cdd4e0;
+    border-top: 1px dashed #3a4150;
+    padding-top: 14px;
+  }
+  .req code { color: var(--gold); font-family: "DM Mono", monospace; font-size: 12px; }
+
+  /* ---------- Quadrant ---------- */
+  .quad {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 6px;
+  }
+  .q {
+    border: 2.5px solid var(--ink);
+    border-radius: 14px;
+    padding: 16px;
+    box-shadow: 4px 4px 0 var(--ink);
+  }
+  .q b { display: block; margin-bottom: 4px; font-size: 15px; }
+  .q small { font-size: 13px; color: #23272f; }
+  .q1 { background: var(--pitch-light); }
+  .q2 { background: var(--gold); }
+  .q3 { background: var(--coral); }
+  .q4 { background: var(--paper-2); }
+
+  /* ---------- Legend ---------- */
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 18px;
+    background: var(--white);
+    border: 2.5px solid var(--ink);
+    border-radius: 14px;
+    box-shadow: 4px 4px 0 var(--ink);
+    padding: 16px 20px;
+    margin: 8px 0 4px;
+    font-size: 13px;
+  }
+  .legend div { display: flex; align-items: center; gap: 7px; }
+
+  /* ---------- Callout ---------- */
+  .callout {
+    background: var(--paper-2);
+    border: 2.5px solid var(--ink);
+    border-left-width: 9px;
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin-top: 18px;
+    font-size: 14.5px;
+  }
+  .callout b { color: var(--ink); }
+
+  footer {
+    border-top: 2.5px solid var(--ink);
+    margin-top: 40px;
+    padding: 26px 0 50px;
+    color: var(--ink-soft);
+    font-size: 13px;
+  }
+  a { color: var(--pitch); }
+
+  @media (max-width: 620px) {
+    .quad { grid-template-columns: 1fr; }
+    .sec-sub { margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="kicker">Repo health · safety net</span>
+    <h1 class="title display">Guardrails &amp; Checks<br><span class="hl">3 Musketeers WC Bet Game</span></h1>
+    <p class="lede">
+      A friends-only World Cup 2026 betting league, <strong>built almost entirely by AI agents</strong>.
+      Because no human owns any file, the project leans on layered, automated guardrails to keep
+      agents honest: a CI gate, an AI review bot, a meta-analytics loop that grades the agents themselves,
+      and a web of invariants enforced in the database, the build, and at commit time.
+    </p>
+    <div class="stat-row">
+      <div class="stat"><b>6</b><span>GitHub workflows</span></div>
+      <div class="stat"><b>3</b><span>required PR checks</span></div>
+      <div class="stat"><b>5</b><span>test suites (vitest)</span></div>
+      <div class="stat"><b>10</b><span>canon CLAUDE.md docs</span></div>
+      <div class="stat"><b>3×</b><span>defense layers per invariant</span></div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- LEGEND -->
+  <div class="legend">
+    <div><span class="chip ci">CI</span> blocks the PR automatically</div>
+    <div><span class="chip ai">AI&nbsp;review</span> bot judgement</div>
+    <div><span class="chip hook">git&nbsp;hook</span> runs on your machine</div>
+    <div><span class="chip db">DB</span> enforced in Postgres</div>
+    <div><span class="chip runtime">runtime</span> enforced in the app</div>
+    <div><span class="chip docs">convention</span> docs + culture</div>
+  </div>
+
+  <!-- 1. PR LIFECYCLE -->
+  <section id="lifecycle">
+    <div class="sec-head">
+      <div class="sec-num">01</div>
+      <h2 class="sec-title display">The merge gate — how a PR ships</h2>
+    </div>
+    <p class="sec-sub">
+      <code class="mono">main</code> is branch-protected: direct pushes are rejected and three checks must be
+      green before anything merges. An approval alone never ships code — it only removes the human-merge step.
+    </p>
+
+    <div class="flow">
+      <h3>PR → main pipeline</h3>
+      <div class="pipeline">
+        <div class="node">
+          <div class="n-top">open PR</div>
+          <b>feat/ax/…</b>
+          <small>Conventional-Commits title required</small>
+        </div>
+        <div class="arrow">→</div>
+        <div class="node gate">
+          <div class="n-top">check 1</div>
+          <b>ci</b>
+          <small>lint · typecheck · test · build</small>
+        </div>
+        <div class="arrow">→</div>
+        <div class="node gate">
+          <div class="n-top">check 2</div>
+          <b>claude-review / review</b>
+          <small>AI bot approves or requests changes</small>
+        </div>
+        <div class="arrow">→</div>
+        <div class="node gate">
+          <div class="n-top">check 3</div>
+          <b>pr-title-lint / lint</b>
+          <small>title = valid commit subject</small>
+        </div>
+        <div class="arrow">→</div>
+        <div class="node ship">
+          <div class="n-top">auto</div>
+          <b>squash-merge</b>
+          <small>→ Vercel promotes to prod</small>
+        </div>
+      </div>
+      <div class="req">
+        All three are <b>required status checks</b>. <code>auto-merge.yml</code> flips on GitHub auto-merge once a
+        trusted author (or the bot) approves — but branch protection holds the merge until every check passes.
+        Squash is the only merge strategy, so the <b>PR title becomes the commit on main</b>.
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. CI CHECKS -->
+  <section id="ci">
+    <div class="sec-head">
+      <div class="sec-num">02</div>
+      <h2 class="sec-title display">Continuous integration</h2>
+    </div>
+    <p class="sec-sub">Automated checks that run on every pull request and every push to <code class="mono">main</code>.</p>
+
+    <div class="grid">
+      <div class="card">
+        <h3><span class="chip ci">CI</span> Build pipeline</h3>
+        <p>One job runs the full loop in order: <code class="mono">npm ci → lint → typecheck → test → build</code>. Any
+           step failing fails the check and blocks merge.</p>
+        <p>The build step deliberately runs with placeholder Supabase env and an <em>empty</em> Sentry DSN — so CI
+           exercises the "Sentry no-ops when unconfigured" path on every run.</p>
+        <div class="files"><span class="file">.github/workflows/ci.yml</span></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip ci">CI</span> PR title lint</h3>
+        <p>Enforces <a href="https://www.conventionalcommits.org">Conventional Commits</a> on the PR title via
+           <code class="mono">action-semantic-pull-request</code>. Allowed types: feat, fix, chore, docs, refactor,
+           perf, ci, revert, style. Subject must start lowercase.</p>
+        <p>Matters because squash-merge turns the PR title into the permanent commit message on <code class="mono">main</code>.</p>
+        <div class="files"><span class="file">.github/workflows/pr-title-lint.yml</span></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip ci">CI</span> Type safety</h3>
+        <p><code class="mono">tsc --noEmit</code> over the whole tree. Supabase queries are fully typed via a generated
+           <code class="mono">Database</code> namespace threaded through every client, so a schema change that isn't
+           reflected in <code class="mono">types.ts</code> surfaces as a type error.</p>
+        <div class="files"><span class="file">npm run typecheck</span><span class="file">lib/supabase/types.ts</span></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip ci">CI</span> Auto-merge orchestration</h3>
+        <p>On an approving review from a trusted author, enables GitHub native auto-merge (squash). Idempotent and
+           gated on <code class="mono">author_association ∈ {OWNER, MEMBER, COLLABORATOR}</code> so a drive-by fork
+           can never trigger a merge.</p>
+        <div class="files"><span class="file">.github/workflows/auto-merge.yml</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. AI REVIEW AGENT -->
+  <section id="review">
+    <div class="sec-head">
+      <div class="sec-num">03</div>
+      <h2 class="sec-title display">AI review agent</h2>
+    </div>
+    <p class="sec-sub">
+      A required check backed by <code class="mono">anthropics/claude-code-action</code>. It reads the project's canon
+      (<code class="mono">AGENTS.md</code> + per-directory <code class="mono">CLAUDE.md</code>) <em>before</em> the diff,
+      then approves or requests changes. Its verdict gates the merge.
+    </p>
+
+    <div class="grid">
+      <div class="card">
+        <h3><span class="chip ai">AI&nbsp;review</span> Verdict-as-gate</h3>
+        <p>A separate "Gate" step reads the bot's most-recent formal review state. <code class="mono">APPROVED</code>
+           passes; <code class="mono">CHANGES_REQUESTED</code> — or a missing / comment-only review — fails the check.</p>
+        <p>Needed because GitHub excludes bot reviews from branch-protection's "required approvals" count, so the
+           workflow's own exit code is what actually gates auto-merge.</p>
+        <div class="files"><span class="file">.github/workflows/claude-review.yml</span></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip ai">AI&nbsp;review</span> Blocks on correctness &amp; security</h3>
+        <p>Requests changes for logic errors, broken contracts, race conditions, unhandled error branches that crash
+           prod, and security issues: XSS, SQL injection, command injection, secrets exposure, and <b>RLS leaks</b>.</p>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip ai">AI&nbsp;review</span> Enforces project invariants</h3>
+        <p>Explicitly checks the load-bearing rules: points-sync, append-only migrations, cron-secret auth,
+           service-role guard, RLS-first pick visibility, the server-action result shape, idempotent scoring, and
+           the AI co-author trailer on every commit.</p>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip ai">AI&nbsp;review</span> Demands test coverage</h3>
+        <p>New logic in <code class="mono">lib/scoring</code>, <code class="mono">predictions</code>,
+           <code class="mono">banter</code>, <code class="mono">auth</code>, or <code class="mono">football-data</code>
+           needs a test or a written justification. Pure UI / copy / docs PRs are exempt. Won't block on naming, comment
+           density, or style nits the codebase doesn't already follow.</p>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip ai">AI&nbsp;review</span> Trust boundary</h3>
+        <p>Only runs on non-draft PRs from trusted authors. Authenticates against the maintainer's Claude subscription
+           via OAuth token (not a metered API key), and is granted a narrow tool allowlist so it can actually post the
+           review instead of silently drafting one.</p>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip ai">AI&nbsp;review</span> Inline + summary</h3>
+        <p>Posts one inline comment per blocker anchored to the offending line, then a single formal review summarising
+           findings — the same artifact the gate step reads back.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. LOCAL & COMMIT-TIME -->
+  <section id="local">
+    <div class="sec-head">
+      <div class="sec-num">04</div>
+      <h2 class="sec-title display">Local &amp; commit-time guards</h2>
+    </div>
+    <p class="sec-sub">Fast feedback before code ever leaves the machine, plus a reusable verify subagent.</p>
+
+    <div class="grid">
+      <div class="card">
+        <h3><span class="chip hook">git&nbsp;hook</span> Husky pre-commit</h3>
+        <p>Runs <code class="mono">npm run lint &amp;&amp; npm run typecheck</code> on every commit, catching the two
+           cheapest failures before they reach CI. Wired up automatically via the <code class="mono">prepare: husky</code>
+           install script.</p>
+        <div class="files"><span class="file">.husky/pre-commit</span></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip docs">convention</span> Verifier subagent</h3>
+        <p>A dedicated Claude Code subagent that runs lint → typecheck → test → build, stops at the first failure, and
+           reports a ≤40-line actionable excerpt — keeping the parent agent's context small. It can't edit code or
+           propose fixes; its only output is a pass/fail report.</p>
+        <div class="files"><span class="file">.claude/agents/verifier.md</span></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip docs">convention</span> Git-identity protection</h3>
+        <p>Agents are forbidden from running <code class="mono">git config user.name/email</code> — the human sets it
+           once per clone. Overwriting it would impersonate a teammate. The session ritual verifies the identity is a
+           human name, not "Claude".</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. TESTS -->
+  <section id="tests">
+    <div class="sec-head">
+      <div class="sec-num">05</div>
+      <h2 class="sec-title display">Test suites</h2>
+    </div>
+    <p class="sec-sub"><code class="mono">vitest</code> runs in CI. The suites concentrate on the highest-stakes pure logic — scoring, locks, and the analytics eval schema.</p>
+
+    <div class="grid">
+      <div class="card">
+        <h3><span class="chip ci">CI</span> Points-sync drift</h3>
+        <p>Asserts every value in the <code class="mono">POINTS</code> object matches its SQL twin. If TS and the
+           <code class="mono">points_*</code> SQL functions ever skew, this test goes red instead of silently
+           mis-scoring the league.</p>
+        <div class="files"><span class="file">lib/scoring/rules.test.ts</span></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip ci">CI</span> Lock logic</h3>
+        <p>Verifies <code class="mono">computeLockState</code> / <code class="mono">matchIsLocked</code> around
+           <code class="mono">first_kickoff_at</code> and <code class="mono">knockout_start_at</code> — the timestamps
+           that stand between "round-1 picks" and "I peeked at the result".</p>
+        <div class="files"><span class="file">lib/scoring/lock.test.ts</span></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip ci">CI</span> Bracket &amp; rankings</h3>
+        <p>Covers the knockout-slot graph and "Suggest qualifiers" helpers, plus the canonical FIFA-2026 rankings used
+           for rank-based dark-horse scoring.</p>
+        <div class="files"><span class="file">lib/scoring/bracket-tree.test.ts</span><span class="file">fifa-rankings.test.ts</span></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip ci">CI</span> Eval-case schema</h3>
+        <p>Every analytics eval case under <code class="mono">evals/cases/*.json</code> is validated against a strict
+           schema. A malformed regression case fails <code class="mono">npm test</code>.</p>
+        <div class="files"><span class="file">analytics/evals/cases.test.ts</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. CODEBASE INVARIANTS -->
+  <section id="invariants">
+    <div class="sec-head">
+      <div class="sec-num">06</div>
+      <h2 class="sec-title display">Codebase invariants</h2>
+    </div>
+    <p class="sec-sub">
+      The rules that, if broken, quietly corrupt the game. Each is defended in <em>more than one</em> place — DB, build,
+      tests, and the review bot — so no single missed check is catastrophic.
+    </p>
+
+    <div class="grid">
+      <div class="card">
+        <h3><span class="chip db">DB</span> Scoring idempotency</h3>
+        <p>Every write to <code class="mono">point_awards</code> goes through <code class="mono">score_*()</code> SQL
+           functions keyed on <code class="mono">idempotency_key</code> — safe to re-run under the 10-min cron. A later
+           migration (0014) added delete-stale-then-insert reconciliation so a corrected result revokes now-wrong awards.</p>
+        <div class="files"><span class="file">0002_scoring.sql</span><span class="file">0014_reconcile_scoring.sql</span></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip db">DB</span> RLS is the source of truth</h3>
+        <p>Who can see whose picks is enforced by Row-Level Security, not app code. Picks are invisible to other users
+           before kickoff via the <code class="mono">*_read_after_kickoff</code> policies. Locks are enforced in three
+           independent layers: DB triggers, RLS, and the UI.</p>
+        <div class="files"><span class="file">0001_init.sql</span></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip db">DB</span> Migrations are append-only</h3>
+        <p>Merged migrations are never edited — changes land as a new numbered file. Tracked as a <b>critical safety
+           eval case</b> and a hard block in the review bot, machine-checkable straight from the diff.</p>
+        <div class="files"><span class="file">supabase/migrations/</span></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip runtime">runtime</span> Cron-secret auth</h3>
+        <p>Every handler under <code class="mono">app/api/cron/*</code> verifies <code class="mono">CRON_SECRET</code>
+           via the shared <code class="mono">authorizedCron()</code> helper, which compares with
+           <code class="mono">crypto.timingSafeEqual</code> (length-mismatch short-circuits first) — never a raw
+           <code class="mono">===</code>.</p>
+        <div class="files"><span class="file">lib/cron/auth.ts</span></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip runtime">runtime</span> Service-role guard</h3>
+        <p><code class="mono">supabaseService()</code> bypasses RLS, so it's never called from user-facing routes
+           without an explicit authorization check above it. A leak here would reveal locked picks — catastrophic for a
+           predictions game.</p>
+        <div class="files"><span class="file">lib/supabase/server.ts</span></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip runtime">runtime</span> Points-sync (two-file rule)</h3>
+        <p>A point value can't change in <code class="mono">rules.ts</code> alone — it requires a matching new migration
+           updating the SQL function. Mirrored for <code class="mono">FIFA_RANKINGS_2026</code> ↔ the
+           <code class="mono">teams.fifa_ranking</code> seed. Backed by the points-sync test.</p>
+        <div class="files"><span class="file">lib/scoring/rules.ts</span></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip runtime">runtime</span> Server-action result shape</h3>
+        <p>Every server action returns the discriminated union <code class="mono">{ ok: true } | { ok: false; error }</code>,
+           and the UI handles both branches with optimistic-update-then-rollback. Copy-paste baseline for every new picker.</p>
+        <div class="files"><span class="file">MatchPickCard.tsx</span></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip db">DB</span> 180-char banter cap (triple)</h3>
+        <p>The chat body length limit is enforced in three aligned places: the client counter+disable, the server
+           action's <code class="mono">validateBody()</code>, and a Postgres <code class="mono">CHECK</code> constraint.
+           Change one, change all three.</p>
+        <div class="files"><span class="file">0011_banter.sql</span></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip runtime">runtime</span> Middleware scoping</h3>
+        <p>The session-refresh proxy matcher excludes <code class="mono">/api/cron/*</code> and
+           <code class="mono">/_next/data/*</code>, so pg_cron pings don't trigger a Supabase session refresh on every hit.</p>
+        <div class="files"><span class="file">proxy.ts</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. SENTRY -->
+  <section id="sentry">
+    <div class="sec-head">
+      <div class="sec-num">07</div>
+      <h2 class="sec-title display">Error tracking &amp; privacy</h2>
+    </div>
+    <p class="sec-sub">Production errors and session replays land in Sentry — with privacy guardrails baked into the integration.</p>
+
+    <div class="grid">
+      <div class="card">
+        <h3><span class="chip runtime">runtime</span> Gated, no-op when unconfigured</h3>
+        <p>The whole integration is gated on <code class="mono">NEXT_PUBLIC_SENTRY_DSN</code>, so local and CI builds
+           without the env vars no-op cleanly — and CI proves it by building with an empty DSN.</p>
+        <div class="files"><span class="file">instrumentation.ts</span><span class="file">sentry.server.config.ts</span></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip runtime">runtime</span> No PII in events</h3>
+        <p><code class="mono">Sentry.setUser</code> is only ever called with <code class="mono">{ id, username }</code>
+           — never email. Session replay is <b>errors-only</b> and masks all inputs, which covers the login email field.</p>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip runtime">runtime</span> Structured capture helpers</h3>
+        <p>Server actions surface handled errors through <code class="mono">captureServerActionError</code> (which
+           flushes before the serverless function freezes); cron handlers tag exceptions with
+           <code class="mono">{ cron: "&lt;name&gt;" }</code>. Migration-drift is captured with the PG error code so the
+           next drift is diagnosed without a DB probe.</p>
+        <div class="files"><span class="file">lib/sentry/capture.ts</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8. AGENT ANALYTICS -->
+  <section id="analytics">
+    <div class="sec-head">
+      <div class="sec-num">08</div>
+      <h2 class="sec-title display">Agent product analytics</h2>
+    </div>
+    <p class="sec-sub">
+      The most unusual guardrail: since AI agents <em>are</em> the developers here, the repo instruments the agents'
+      own work. A <b>PR = one agent run</b>, the <b>area label = the workflow</b>, and <b>corrections</b> (post-merge
+      fixes, reverts, review CHANGES_REQUESTED) are the acceptance signal. No product code, no dependencies — just Node
+      built-ins over git + GitHub history.
+    </p>
+
+    <div class="quad">
+      <div class="q q1"><b>Q1 · Trusted</b><small>High completion, low correction. Agents ship clean — candidate for more autonomy.</small></div>
+      <div class="q q2"><b>Q2 · Finishing work nobody trusts ⚠</b><small>Ships, but keeps needing fixes. Dashboards call it healthy; it isn't. Tighten quality &amp; mine corrections into evals.</small></div>
+      <div class="q q3"><b>Q3 · Failing before review</b><small>Low completion <em>and</em> high correction — structural. Audit tooling/permissions/context.</small></div>
+      <div class="q q4"><b>Q4 · Too cautious but valuable</b><small>Accepted when it finishes, but finishes too rarely. Over-gated — reduce friction.</small></div>
+    </div>
+
+    <div class="grid" style="margin-top:18px">
+      <div class="card">
+        <h3><span class="chip ci">CI</span> Live four-quadrant report</h3>
+        <p>A GitHub Action recomputes the completion-vs-acceptance report weekly, on every merged PR, and on demand,
+           then upserts a single tracking issue. It deliberately <b>commits nothing</b> — <code class="mono">main</code>
+           is protected and the report is cheap to recompute.</p>
+        <div class="files"><span class="file">.github/workflows/agent-analytics.yml</span><span class="file">scripts/report.mjs</span></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip docs">convention</span> Correction → eval loop</h3>
+        <p>Every correction becomes a candidate regression test. <code class="mono">agent:evals</code> drafts an eval
+           stub from the correction; the committed cases under <code class="mono">evals/cases/</code> are then validated
+           by <code class="mono">npm test</code> — closing the loop from "agent got it wrong" to "CI catches it next time".</p>
+        <div class="files"><span class="file">scripts/correction-to-eval.mjs</span><span class="file">evals/cases/*.json</span></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip docs">convention</span> Fail-safe by design</h3>
+        <p>Scripts and the optional local hooks must never break a build, a session, or CI — <code class="mono">gh</code>/git
+           failures degrade gracefully and the hook always exits 0. The dir adds no deps and touches neither the product
+           runtime nor the DB.</p>
+        <div class="files"><span class="file">analytics/CLAUDE.md</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 9. PROCESS & DOCS -->
+  <section id="process">
+    <div class="sec-head">
+      <div class="sec-num">09</div>
+      <h2 class="sec-title display">Process &amp; documentation guardrails</h2>
+    </div>
+    <p class="sec-sub">The softer rails — templates, labels, and the "canon docs" system that puts invariants next to the code that has to honor them.</p>
+
+    <div class="grid">
+      <div class="card">
+        <h3><span class="chip docs">convention</span> The CLAUDE.md canon system</h3>
+        <p>A root <code class="mono">AGENTS.md</code> plus a per-directory <code class="mono">CLAUDE.md</code> in every
+           significant area. Each is marked <b>Canon</b> — if reality and the doc disagree, you fix the doc in the same
+           PR. Invariants live beside the code, not in a wiki that rots.</p>
+        <div class="files"><span class="file">AGENTS.md</span><span class="file">*/CLAUDE.md</span></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip docs">convention</span> PR template checklist</h3>
+        <p>Every PR ships a checklist: typecheck/lint/build pass, CHANGELOG updated, touched <code class="mono">CLAUDE.md</code>
+           refreshed, no migration edits an existing file, and point-value changes touch <b>both</b> rules.ts and a new
+           migration.</p>
+        <div class="files"><span class="file">.github/pull_request_template.md</span></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip ci">CI</span> Label sync</h3>
+        <p>Labels are declared in code (<code class="mono">labels.yml</code>) and synced to GitHub by a workflow on
+           push-to-main. Type/area/priority taxonomy stays consistent and reviewable.</p>
+        <div class="files"><span class="file">.github/labels.yml</span><span class="file">sync-labels.yml</span></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip docs">convention</span> Structured issue intake</h3>
+        <p>Blank issues are disabled; everything routes through Bug / Idea / Task forms that auto-apply the matching
+           <code class="mono">type:*</code> label. Keeps the tracker triage-able.</p>
+        <div class="files"><span class="file">.github/ISSUE_TEMPLATE/</span></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip docs">convention</span> Standing code review</h3>
+        <p>A living <code class="mono">CODE_REVIEW.md</code> audit grades open risks P0/P1/P2 with file:line citations
+           and records resolutions inline — e.g. the <code class="mono">DEV_INSTANT_LOGIN</code> prod foot-gun, removed
+           wholesale before onboarding.</p>
+        <div class="files"><span class="file">CODE_REVIEW.md</span></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip docs">convention</span> AI co-author trailer</h3>
+        <p>Every agent-authored commit ends with a <code class="mono">Co-authored-by: Claude</code> trailer, making
+           AI-assisted work queryable across history — and feeding the analytics attribution.</p>
+      </div>
+    </div>
+
+    <div class="callout">
+      <b>Defense in depth, by design.</b> The load-bearing rules are never trusted to a single check. Points-sync is
+      guarded by a unit test, the PR checklist, and the review bot. Append-only migrations are an eval case, a review-bot
+      block, and a documented invariant. Pick visibility is enforced by DB triggers, RLS policies, <em>and</em> the UI.
+      Any one rail can miss without the game breaking.
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    Generated overview of the repository's guardrails and checks · 3 Musketeers WC Bet Game ·
+    Next.js 16 + React 19 + Supabase · built by AI agents, kept honest by the rails above.
+  </div>
+</footer>
+
+</body>
+</html>
