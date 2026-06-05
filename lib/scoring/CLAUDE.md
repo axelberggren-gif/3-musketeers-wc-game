@@ -55,6 +55,12 @@ Actual point-awarding writes happen in SQL functions (see `supabase/migrations/0
   and bare `STAGE` (`F`, `W`) by `.split("-")[0]`.
 - The DB-side scoring functions live in `supabase/migrations/0002_scoring.sql` and
   use `point_awards.idempotency_key` to dedupe. Never bypass them with raw inserts.
+- **Top scorer + troublemaker are drain-gated** (migration 0016, #83): they read
+  `player_goal_log` / `player_card_log`, which `syncFixtures()` populates 5 matches at
+  a time, so `score_tournament()`'s top-scorer block and all of `score_troublemaker()`
+  short-circuit until `all_match_details_synced()` is true (no FINISHED match with
+  `details_synced_at IS NULL`). Prevents the wrong winner showing in the window right
+  after the Final; self-heals once the per-match detail drain catches up.
 
 ## Recent changes
 <!-- Newest first. Keep last 10. One line per entry. -->
