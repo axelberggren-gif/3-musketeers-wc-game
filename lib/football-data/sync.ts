@@ -179,15 +179,40 @@ export async function syncFixtures() {
   }
 }
 
+// Daily catch-up cron. The 10-min syncFixtures() drain is capped at 5 matches
+// per run; this is the backstop that clears any remaining backlog of FINISHED
+// matches whose goals/cards haven't been drained yet, then reconciles
+// tournament scoring so the drain-gated top-scorer / troublemaker categories
+// settle on complete data (see #83). It used to just fetch the /scorers list
+// and log it — that fed no scoring table and was a footgun during incidents.
+//
+// Rate budget: this run spends NO request on the list endpoint, so its full
+// 10 req/min budget is available for detail fetches. Capped at
+// SCORERS_DRAIN_LIMIT (8) to stay comfortably under the limit.
+const SCORERS_DRAIN_LIMIT = 8;
+
 export async function syncScorers() {
   const supabase = supabaseService();
   const fd = new FootballDataClient();
   try {
-    const { scorers } = await fd.scorers(50);
-    // Goals are recorded individually via match goals where available;
-    // scorers endpoint gives cumulative totals. We treat it as informational.
-    await log(supabase, "/scorers", `Fetched ${scorers.length} scorers`, { count: scorers.length });
-    return { scorers: scorers.length };
+    const detailsSynced = await drainPendingMatchDetails(supabase, fd, SCORERS_DRAIN_LIMIT);
+
+    // No-op until the Final is FINISHED and the drain is complete (the gated
+    // sub-scorers short-circuit); cheap otherwise.
+    let scored = 0;
+    const { data } = await supabase.rpc("score_tournament");
+    if (typeof data === "number") scored = data;
+    try {
+      await supabase.rpc("refresh_league_standings");
+    } catch {}
+
+    await log(
+      supabase,
+      "/scorers",
+      `Drained ${detailsSynced} match details, tournament awarded ${scored}`,
+      { detailsSynced, scored },
+    );
+    return { detailsSynced, scored };
   } catch (e) {
     const err = e instanceof Error ? e.message : String(e);
     await log(supabase, "/scorers", `Failed: ${err}`);
