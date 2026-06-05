@@ -75,5 +75,14 @@ export async function consumeInviteForUser(token: string, userId: string) {
     await Sentry.flush(2000);
     return { ok: false, error: row?.error ?? "Invite is invalid or expired." } as const;
   }
+  // The new league_members row won't show on the (materialized) league_standings
+  // board until a refresh — and pre-tournament nothing else triggers one — so the
+  // owner couldn't see a freshly-joined member. Refresh now (CONCURRENTLY is valid
+  // via league_standings_pk). Best-effort: a failed refresh must not fail the join.
+  try {
+    await service.rpc("refresh_league_standings");
+  } catch (e) {
+    Sentry.captureException(e, { tags: { area: "invite" } });
+  }
   return { ok: true, league_slug: row.league_slug } as const;
 }
