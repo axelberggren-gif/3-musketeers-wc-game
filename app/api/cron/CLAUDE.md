@@ -11,6 +11,11 @@ admin UI for ad-hoc syncs.
 - `sync-fixtures/route.ts` — POST/GET. Calls `syncFixtures()` from
   `lib/football-data/sync.ts`. Scheduled every 10 minutes.
 - `sync-scorers/route.ts` — POST/GET. Calls `syncScorers()`. Scheduled daily 06:00 UTC.
+  Despite the name, this is the **detail-drain + reconcile backstop**, not a scorers
+  fetch: it drains any FINISHED-match goal/card backlog the 10-min fixtures cron
+  hasn't reached (cap 8/run — no list call, so the full 10/min budget is for details),
+  then re-runs `score_tournament()` + `refresh_league_standings`. This is what lets
+  the drain-gated top-scorer / troublemaker categories settle on complete data (#83).
 
 ## Conventions
 - Every handler exports `runtime = "nodejs"` and `dynamic = "force-dynamic"` — these
@@ -45,5 +50,6 @@ admin UI for ad-hoc syncs.
 
 ## Recent changes
 <!-- Newest first. Keep last 10. One line per entry. -->
+- 2026-06-05: `sync-scorers` repurposed (#83). `syncScorers()` no longer fetches the informational `/scorers` list (it fed no scoring table); it now drains up to 8 pending FINISHED-match details via `drainPendingMatchDetails()` then re-runs `score_tournament()` + `refresh_league_standings`, acting as the daily backstop to the 10-min fixtures drain. Pairs with migration 0016, which gates top-scorer / troublemaker on `all_match_details_synced()` so they never resolve on a partial drain backlog right after the Final. Route handler unchanged (thin shell). Budget: 8 detail fetches + the standings/scoring RPCs stay under 10 req/min.
 - 2026-05-26: `authorized()` helper extracted to `lib/cron/auth.ts` as `authorizedCron(request)` and deduped between `sync-fixtures/route.ts` and `sync-scorers/route.ts`. Secret comparison now uses `crypto.timingSafeEqual` (with a length-mismatch short-circuit so the timing-safe path never sees mismatched-length buffers) instead of `===`. Refs #17.
 - 2026-05-22: Both `sync-fixtures` and `sync-scorers` catch blocks now call `Sentry.captureException(e, { tags: { cron: "..." } })` before returning the JSON error. No-op when `NEXT_PUBLIC_SENTRY_DSN` is unset.
