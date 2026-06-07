@@ -12,7 +12,7 @@
 
 | Area | Result |
 |---|---|
-| Migrations `0001`–`0015` applied to local Postgres | ✅ all apply cleanly (skipped `0003_cron` — needs `pg_cron`/`pg_net`, not available) |
+| Migrations `0001`–`0016` applied to local Postgres | ✅ all apply cleanly (skipped `0003_cron` — needs `pg_cron`/`pg_net`, not available) |
 | Points‑sync invariant (SQL `points_*()` == `lib/scoring/rules.ts`) | ✅ **holds exactly** |
 | Full tournament simulated (104 matches: 72 group + 32 knockout) | ✅ played to completion |
 | All 12 scoring categories exercised & verified against a hand‑designed truth | ✅ **every award matches** |
@@ -126,7 +126,7 @@ it sums `point_awards.points`, split into `match_points` / `bracket_points` /
 2. `score_match(id)` for each newly‑FINISHED match.
 3. `score_bracket()` if any knockout match was seen.
 4. `score_tournament()` **only once the Final is FINISHED** (chains into
-   total‑goals / highest‑match / troublemaker sub‑scorers).
+   total‑goals / highest‑match / troublemaker sub‑scorers). Its top‑scorer block and all of `score_troublemaker()` are **gated on `all_match_details_synced()`** (migration `0016`) — they defer until no FINISHED match has `details_synced_at IS NULL`, so neither resolves on a partial drain backlog.
 5. `backfill_team_group_letters()`.
 6. `settle_group_stage_props()` → `score_first_eliminated()` + `score_group_winner()`
    per unsettled group.
@@ -134,8 +134,12 @@ it sums `point_awards.points`, split into `match_points` / `bracket_points` /
    from per‑match details (this is the **only** feeder for top‑scorer & troublemaker).
 8. `refresh_league_standings()`.
 
-`syncScorers()` (cron daily 06:00) is **informational only** — it logs the scorers
-list and feeds **no** scoring (see §8‑b).
+`syncScorers()` (cron daily 06:00) is the **detail‑drain backstop** (since #83): it
+drains up to **8** pending FINISHED‑match details via `drainPendingMatchDetails()`
+— spending no request on the `/scorers` list, so its full 10 req/min budget goes to
+details — then re‑runs `score_tournament()` + `refresh_league_standings()`. This
+accelerates the top‑scorer / troublemaker drain‑gate from step 4; it no longer just
+logs the scorers list with no scoring effect (see §8‑b).
 
 **Locks** (from the single `tournament` row): `round1_locked` (`now ≥ first_kickoff_at`)
 blocks match / tournament / group‑winner / player‑prop writes; `round2_locked`
@@ -268,11 +272,17 @@ inspection during the run.
   since dark horse became rank‑based in `0005`/`0014`. It's also *not* in
   `rules.ts`, so it can't drift the points‑sync check — but it's a footgun for
   anyone reading the SQL. Safe to delete in a future migration.
-- **(b) `syncScorers()` feeds no scoring.** The daily `sync-scorers` cron only logs
-  the scorers list; top‑scorer points depend entirely on `player_goal_log`, which is
-  populated by `drainPendingMatchDetails()` inside `sync-fixtures` (capped 5
-  matches/run). If a tournament has many finished matches awaiting detail drains,
-  goal/card logs (and thus top‑scorer/troublemaker) can lag.
+- **(b) `syncScorers()` detail‑drain lag — RESOLVED on current `main` (#83 / #85),
+  after this simulation first ran.** Previously the daily `sync-scorers` cron only
+  logged the scorers list and fed no scoring table, and the sole `player_goal_log` /
+  `player_card_log` feeder was `drainPendingMatchDetails()` inside `sync-fixtures`
+  (capped 5 matches/run) — so right after the Final, top‑scorer / troublemaker could
+  resolve on a partial drain backlog. Migration `0016_gate_tournament_drain.sql` now
+  gates `score_tournament()`'s top‑scorer block and all of `score_troublemaker()` on
+  `all_match_details_synced()`, and `syncScorers()` was repurposed into a daily drain
+  backstop (cap 8). Those two categories now defer until the drain completes and
+  self‑heal — no wrong winner in the window. (Kept in this catalogue because the
+  original run predated the fix; every other item here remains unfixed.)
 - **(c) `score_first_eliminated()` is an approximation.** It flags a team as out
   when ≥2 group rivals exceed its max possible points, i.e. out of the **group**
   top‑2 — but WC 2026 also advances 8 best 3rd‑place teams, so "out of top‑2" ≠ "out
@@ -310,7 +320,8 @@ for f in 0001_init 0002_scoring 0004_score_fixes 0005_more_tournament_props \
          0006_fix_league_members_rls 0007_leagues_owner_base_case \
          0008_rls_security_definer_helper 0009_redeem_league_invite_citext_cast \
          0010_backfill_team_group_letter 0011_banter 0012_pick_reactions \
-         0013_add_r32_stage 0014_reconcile_scoring 0015_profile_onboarding; do
+         0013_add_r32_stage 0014_reconcile_scoring 0015_profile_onboarding \
+         0016_gate_tournament_drain; do
   sudo -u postgres psql -d wcsim -v ON_ERROR_STOP=1 -f supabase/migrations/$f.sql
 done
 
