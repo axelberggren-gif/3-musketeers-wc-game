@@ -1,4 +1,4 @@
--- 0016_scoring_hygiene.sql
+-- 0018_scoring_hygiene.sql
 -- Scoring SQL hygiene cleanup (no change to any awarded point value).
 --
 -- 1. Drop dead `points_dark_horse()`. It returned a flat 10 and was only ever
