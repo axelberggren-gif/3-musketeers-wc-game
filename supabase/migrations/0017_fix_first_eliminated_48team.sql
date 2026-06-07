@@ -24,7 +24,7 @@
 -- value change → points-sync with lib/scoring/rules.ts holds; no db:types).
 -- Migrations are append-only: 0005 and 0014 are untouched. The companion group
 -- winner / settle_group_stage_props reconcile lives in
--- 0016_reconcile_group_stage_props.sql (issue #82); that migration no longer
+-- 0019_reconcile_group_stage_props.sql (issue #82); that migration no longer
 -- redefines score_first_eliminated() — this one owns it.
 --
 -- ---------------------------------------------------------------------------
@@ -51,7 +51,7 @@
 -- only gains points), so the latch is stable as results accumulate; the
 -- reconcile path below only moves/clears it when a result is actually corrected.
 --
--- Reconcile (mirrors 0014 + 0016_reconcile_group_stage_props.sql):
+-- Reconcile (mirrors 0014 + 0019_reconcile_group_stage_props.sql):
 --   * no early-return on the latch;
 --   * re-derive first_elimination from the current result (on conflict do update
 --     gated on `is distinct from`, a no-op when unchanged);
