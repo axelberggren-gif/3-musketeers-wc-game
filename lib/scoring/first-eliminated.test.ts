@@ -8,7 +8,7 @@ import {
 } from "./first-eliminated";
 
 // Mirror of the SQL score_first_eliminated() in
-// supabase/migrations/0016_fix_first_eliminated_48team.sql. These cover the
+// supabase/migrations/0017_fix_first_eliminated_48team.sql. These cover the
 // WC 2026 48-team format gap from issue #81: being out of the group top-2 is
 // NOT elimination, because the 8 best third-placed teams also advance.
 

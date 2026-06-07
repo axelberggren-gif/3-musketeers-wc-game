@@ -1,5 +1,8 @@
 // Pure mirror of the SQL `score_first_eliminated()` elimination decision
-// (supabase/migrations/0016_fix_first_eliminated_48team.sql). No IO.
+// (supabase/migrations/0017_fix_first_eliminated_48team.sql). No IO. The SQL
+// also reconciles the award (delete-stale-then-insert, clears the latch when no
+// team is eliminated) — that is award bookkeeping, not modeled here; this module
+// is the canonical spec for *which* team is "first eliminated".
 //
 // "First eliminated from the tournament" under WC 2026's 48-team format is NOT
 // the same as "out of the group's top 2": 12 groups of 4, and the 8 best
