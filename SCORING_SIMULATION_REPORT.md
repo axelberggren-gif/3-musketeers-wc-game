@@ -6,6 +6,13 @@
 > football‑data.org). The app's real SQL scoring functions were executed against
 > a local Postgres instance and every point award was verified.
 
+> **Note (2026-06-08):** the **group‑winner** prop (`score_group_winner` /
+> `points_group_winner` / `POINTS.tournament.groupWinner`, 5 pts ea.) was removed
+> after this report was generated — see migration `0021_remove_group_winner_prop.sql`.
+> The model, worked example, and leaderboard figures below are preserved as the
+> simulation actually ran (pre‑removal) and still include it; the live max obtainable
+> total is now lower by the group‑winner points.
+
 ---
 
 ## 1. Executive summary

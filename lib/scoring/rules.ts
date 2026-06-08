@@ -22,7 +22,6 @@ export const POINTS = {
     totalGoalsBase: 20,
     highestMatchBase: 15,
     troublemaker: 15,
-    groupWinner: 5,
     firstEliminated: 10,
     // Outright "closest guess wins, ties split the base" numeric props (0020).
     // finalGoals + biggestWinMargin settle off scorelines; goldenBootGoals +

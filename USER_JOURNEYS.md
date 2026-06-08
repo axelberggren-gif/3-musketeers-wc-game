@@ -25,7 +25,7 @@ are league-scoped, not global.
 
 | State | Trigger | Effect |
 | --- | --- | --- |
-| `round1Locked` | `now >= tournament.first_kickoff_at` | Round 1 (1X2 + tournament props + group winners) is read-only |
+| `round1Locked` | `now >= tournament.first_kickoff_at` | Round 1 (1X2 + tournament props) is read-only |
 | `round2Locked` | `now >= tournament.knockout_start_at` | Bracket is read-only |
 | `matchIsLocked` | `now >= matches.kickoff_at` for a single match | That match's row becomes read-only; friends' picks become visible on `/match/[id]` |
 
@@ -70,7 +70,7 @@ flowchart TD
     Leagues -.nav.-> R2["/predict/bracket<br/>Bracket"]
     Leagues -.nav.-> AdminGate{Is admin?}
 
-    R1 --> R1Picks[1X2 cards · Tournament props ·<br/>Group winners · Player props]
+    R1 --> R1Picks[1X2 cards · Tournament props ·<br/>Player props]
     R2 --> R2Slots[R16 · QF · SF · F · Champion slots]
 
     AdminGate -- Yes --> Admin["/admin<br/>Dashboard"]
@@ -267,17 +267,10 @@ Walk through every selector:
 - **First goal in the Final** — PlayerSelect, writes to `player_prop_predictions(prop_key='first_goal_final')`.
 - Verify optimistic update + rollback for each (force a network failure to test).
 
-### E5. Group winners  (`GroupWinnerPicker.tsx`, `setGroupWinnerPick`)
-- 12 TeamSelects, one per group letter A–L, options filtered to that group's 4 teams.
-- Pick a team → row autosaves via `group_winner_predictions` upsert.
-- Clear a pick (select the "—" option) → server action deletes the row.
-- Invalid group letter (rare; impossible from the UI but possible via direct call) returns `{ ok: false, error: "Invalid group letter." }`.
-
-### E6. Locked Round 1
+### E5. Locked Round 1
 - After `first_kickoff_at`, reload `/predict`.
 - All match cards show the **Locked** badge and tiles are disabled.
 - All TournamentForm fields are disabled.
-- All group winner selects are disabled.
 - CountdownBanner shows the red "⏰ Picks locked." pill.
 
 ---
@@ -426,8 +419,7 @@ Tick when verified. Each row corresponds to a journey above.
 - [ ] E2 Tap-to-pick, tap-again-to-clear, optimistic rollback
 - [ ] E3 Group chips flip pitch-green at full coverage
 - [ ] E4 All 8 tournament/prop fields autosave
-- [ ] E5 12 group winners autosave + clearable
-- [ ] E6 After `first_kickoff_at`, everything Round 1 disabled
+- [ ] E5 After `first_kickoff_at`, everything Round 1 disabled
 - [ ] F2 Bracket slot picks autosave
 - [ ] F3 After `knockout_start_at`, all slots disabled
 - [ ] G1/2 Friends' picks hidden before kickoff, visible after
@@ -456,7 +448,7 @@ Tick when verified. Each row corresponds to a journey above.
 | Members + invites | `app/(app)/leagues/[slug]/members/page.tsx`, `InviteControls.tsx` |
 | Match detail | `app/(app)/match/[id]/page.tsx` |
 | Profile | `app/(app)/profile/[username]/page.tsx`, `lib/stats/profile.ts` |
-| Round 1 | `app/(app)/predict/page.tsx`, `components/predict/MatchPickCard.tsx`, `TournamentForm.tsx`, `GroupWinnerPicker.tsx`, `lib/predictions/actions.ts` |
+| Round 1 | `app/(app)/predict/page.tsx`, `app/(app)/predict/outcomes/page.tsx`, `components/predict/MatchPickCard.tsx`, `OutcomesBoard.tsx`, `lib/predictions/actions.ts` |
 | Bracket | `app/(app)/predict/bracket/page.tsx`, `BracketBuilder.tsx` |
 | Admin layout | `app/(app)/admin/layout.tsx` |
 | Admin dashboard | `app/(app)/admin/page.tsx` |

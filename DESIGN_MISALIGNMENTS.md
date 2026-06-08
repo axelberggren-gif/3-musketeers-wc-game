@@ -166,8 +166,9 @@ correctness review against the existing scoring SQL functions (`score_bracket`).
 **Design**: `project/sticker-c.jsx:StickerProps` — winner / runner-up / golden boot /
 dark horse picker on its own screen, with team-list search.
 
-**Current state**: props are integrated into `/predict` via `TournamentForm` and
-`GroupWinnerPicker`. Deliberate: chat2 confirmed predictions all lock together.
+**Current state**: props live on the `/predict/outcomes` tab via `OutcomesBoard`.
+Deliberate: chat2 confirmed predictions all lock together. (The group-winners picker
+was later removed — redundant with the group-stage 1X2 picks.)
 
 **Why deferred**: not a misalignment per se — recording this so future readers don't
 re-introduce the design's split.
