@@ -1,0 +1,23 @@
+{
+  "fixture": "0001-points-bump-edits-existing-migration",
+  "title": "Bump top-scorer prop to 18 pts (TS + SQL together)",
+  "kind": "blocker",
+  "expected_verdict": "request_changes",
+  "issues": [
+    {
+      "id": "append-only-violation",
+      "file": "supabase/migrations/0002_scoring.sql",
+      "lines": [208, 214],
+      "category": "invariant",
+      "severity": "critical",
+      "match": [
+        "append-only",
+        "existing migration",
+        "new .*migration",
+        "do not edit .*0002",
+        "must add a new .*\\.sql"
+      ]
+    }
+  ],
+  "rationale": "Deliberately hard: the points value moves in BOTH lib/scoring/rules.ts and the SQL, so a shallow 'are TS and SQL in sync?' check sees them aligned and approves. The real blocker is that the SQL change EDITS the already-merged migration 0002_scoring.sql — migrations are append-only; the change must land in a NEW numbered migration. A reviewer that only verifies points-sync, and not the append-only invariant, will miss this."
+}

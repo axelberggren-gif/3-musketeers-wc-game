@@ -23,6 +23,7 @@ plain Node ESM scripts over git + GitHub history.
 - `prompts/01..03` — the three adapted prompt-kit prompts.
 - `evals/validate.ts` + `evals/cases.test.ts` + `evals/cases/*.json` — the regression suite the correction loop feeds.
 - `events/log.ndjson` — committed snapshot (regenerate with `agent:backfill`); `events/local.ndjson` — gitignored local-hook sink.
+- `reviewer-loop/` — self-improving loop for the PR review bot (the `prompt:` rubric in `.github/workflows/claude-review.yml`). `PLAYBOOK.md` is the propose→prove→open-a-PR procedure; `score.mjs` (`npm run review-loop:score`) is the deterministic recall/precision/verdict judge; `suite/` holds PR fixtures + answer keys; `candidates.ndjson` is the ideas log. Human (Axel) is the merge gate; the loop only opens PRs.
 
 ## Conventions
 - Runnable code is `.mjs` (Node 20+, built-ins only), matching `scripts/test-supabase.mjs`. The
@@ -50,4 +51,5 @@ plain Node ESM scripts over git + GitHub history.
   (squashed away) need gh enrichment. Word-bounded slug regex (so "debug" ≠ "bug").
 
 ## Recent changes
+- 2026-06-08: New `reviewer-loop/` sub-tool — a self-improving loop for the PR review bot (the `prompt:` rubric in `.github/workflows/claude-review.yml`). It mines our own misses + scans curated sources (`sources.md`) for review-technique ideas, tests each against a deliberately hard benchmark suite, and opens a PR only on a measured **Pareto improvement** (recall/precision/verdict-accuracy must not regress vs the current rubric as baseline, ≥1 must improve). `score.mjs` (`npm run review-loop:score`, `--selftest` + sample runs included) is the deterministic judge so the rubric never grades itself; `suite/<id>/{pr.diff,expected.json}` are the fixtures (seeded: a subtle append-only-migration-edit blocker, a service-role RLS-leak blocker, a clean copy-change precision guard); `candidates.ndjson` is the ideas log; `PLAYBOOK.md` is the staged procedure. Autonomy boundary: the loop opens PRs, Axel is the merge gate. Obeys the dir rules — no product-runtime/DB writes, no deps, `.mjs` + Node built-ins, fail-safe.
 - 2026-06-03: Initial agent-analytics tooling — backfill miner, four-quadrant report, eval-case loop (validator + suite + 3 seed cases from real corrections), three adapted prompts, and the `agent-analytics` GitHub Action (weekly + per-merge issue upsert, no commits). Local Claude Code hooks are opt-in (`hook-emit.mjs` + a snippet in README) since hooks don't run on the web.

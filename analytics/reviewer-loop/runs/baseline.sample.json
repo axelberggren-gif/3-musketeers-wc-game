@@ -1,0 +1,26 @@
+{
+  "label": "baseline",
+  "rubric_ref": ".github/workflows/claude-review.yml@main",
+  "produced_at": "2026-06-08T00:00:00Z",
+  "note": "ILLUSTRATIVE sample so `npm run review-loop:score` runs out of the box and the schema is unambiguous. The loop OVERWRITES this with a real run of the CURRENT rubric over the suite — PLAYBOOK stage 4. The modelled weakness here (misses the subtle append-only edit in 0001) is the realistic gap a candidate aims to close.",
+  "results": {
+    "0001-points-bump-edits-existing-migration": {
+      "verdict": "approve",
+      "findings": []
+    },
+    "0002-countdown-copy-tweak": {
+      "verdict": "approve",
+      "findings": []
+    },
+    "0003-service-role-leak-in-user-route": {
+      "verdict": "request_changes",
+      "findings": [
+        {
+          "file": "app/(app)/leagues/[slug]/export/route.ts",
+          "line": 12,
+          "text": "This user-facing route calls supabaseService() (service-role, bypasses RLS) and returns every member's match_predictions with no authorization check — it leaks locked picks before kickoff. Block."
+        }
+      ]
+    }
+  }
+}

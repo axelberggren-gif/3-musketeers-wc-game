@@ -1,0 +1,24 @@
+{
+  "fixture": "0003-service-role-leak-in-user-route",
+  "title": "Add a CSV export route for a league",
+  "kind": "blocker",
+  "expected_verdict": "request_changes",
+  "issues": [
+    {
+      "id": "service-role-rls-bypass",
+      "file": "app/(app)/leagues/[slug]/export/route.ts",
+      "lines": [6, 22],
+      "category": "security",
+      "severity": "critical",
+      "match": [
+        "service.?role",
+        "supabaseService",
+        "bypass.*rls",
+        "rls.*bypass",
+        "authorization",
+        "leak"
+      ]
+    }
+  ],
+  "rationale": "A control-grade blocker (not as subtle as 0001). The new user-facing route calls supabaseService() — the RLS-bypassing service-role client — with no authorization check, and returns every league member's match_predictions. That leaks locked picks before kickoff: it trips both the 'Service-role guard' and 'RLS-first for picks' Block-on rules. A competent reviewer must catch this; it anchors recall and stops a candidate from quietly regressing on the obvious cases while chasing the hard one."
+}

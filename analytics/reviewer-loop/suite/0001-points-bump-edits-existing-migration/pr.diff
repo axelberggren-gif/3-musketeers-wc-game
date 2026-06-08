@@ -1,0 +1,36 @@
+PR TITLE: feat(scoring): bump top-scorer prop to 18 pts
+PR BODY:
+  Top scorer felt underweighted vs the 25-pt winner. Bumps it 15 -> 18.
+  Kept points-sync intact: rules.ts and the SQL constant both move to 18.
+
+diff --git a/lib/scoring/rules.ts b/lib/scoring/rules.ts
+index 1a2b3c4..5d6e7f8 100644
+--- a/lib/scoring/rules.ts
++++ b/lib/scoring/rules.ts
+@@ -26,7 +26,7 @@ export const POINTS = {
+   tournament: {
+     winner: 25,
+     runnerUp: 15,
+-    topScorer: 15,
++    topScorer: 18,
+     troublemaker: 15,
+     groupWinner: 5,
+     firstEliminated: 10,
+diff --git a/supabase/migrations/0002_scoring.sql b/supabase/migrations/0002_scoring.sql
+index 9f8e7d6..1c2b3a4 100644
+--- a/supabase/migrations/0002_scoring.sql
++++ b/supabase/migrations/0002_scoring.sql
+@@ -208,7 +208,7 @@ $$ language sql immutable;
+ create or replace function points_top_scorer() returns int as $$
+-  select 15;
++  select 18;
+ $$ language sql immutable;
+
+ create or replace function points_player_prop() returns int as $$
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index aaa1111..bbb2222 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -16,6 +16,7 @@
+ ### Added
++- 2026-06-08 (`pending`) Bump top-scorer prop 15 -> 18 pts (rules.ts + SQL kept in sync) — @ax

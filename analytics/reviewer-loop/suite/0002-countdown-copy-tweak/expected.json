@@ -1,0 +1,8 @@
+{
+  "fixture": "0002-countdown-copy-tweak",
+  "title": "Reword the countdown banner label",
+  "kind": "clean",
+  "expected_verdict": "approve",
+  "issues": [],
+  "rationale": "Pure copy + Tailwind class change in a client component — no logic, no new function, no migration. The rubric explicitly exempts pure UI/styling/copy from the test-coverage requirement and lists 'naming / copy / style nits the codebase doesn't already follow' under Do-NOT-block. Any REQUEST_CHANGES or inline blocker here is a false positive. This is the precision guard: it stops the loop from adopting a rubric that catches one more subtle bug at the cost of nagging on clean PRs."
+}

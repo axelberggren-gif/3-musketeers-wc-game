@@ -13,6 +13,7 @@
     "agent:backfill": "node analytics/scripts/backfill.mjs",
     "agent:report": "node analytics/scripts/report.mjs",
     "agent:evals": "node analytics/scripts/correction-to-eval.mjs",
+    "review-loop:score": "node analytics/reviewer-loop/score.mjs",
     "prepare": "husky"
   },
   "dependencies": {

@@ -1,0 +1,33 @@
+PR TITLE: feat(leagues): add CSV export of league picks
+PR BODY:
+  Lets members download the league's picks as CSV for spreadsheet nerds.
+
+diff --git a/app/(app)/leagues/[slug]/export/route.ts b/app/(app)/leagues/[slug]/export/route.ts
+new file mode 100644
+index 0000000..abc1234
+--- /dev/null
++++ b/app/(app)/leagues/[slug]/export/route.ts
+@@ -0,0 +1,24 @@
++import { NextResponse } from "next/server";
++import { supabaseService } from "@/lib/supabase/server";
++
++export const runtime = "nodejs";
++
++// GET /leagues/<slug>/export — returns every pick in the league as CSV.
++export async function GET(_req: Request, { params }: { params: Promise<{ slug: string }> }) {
++  const { slug } = await params;
++  const svc = supabaseService(); // service role: bypasses RLS
++
++  const { data, error } = await svc
++    .from("match_predictions")
++    .select("user_id, match_id, pick, leagues!inner(slug)")
++    .eq("leagues.slug", slug);
++
++  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
++
++  const header = "user_id,match_id,pick\n";
++  const rows = (data ?? []).map((r) => `${r.user_id},${r.match_id},${r.pick}`).join("\n");
++  return new NextResponse(header + rows, {
++    headers: { "content-type": "text/csv" },
++  });
++}

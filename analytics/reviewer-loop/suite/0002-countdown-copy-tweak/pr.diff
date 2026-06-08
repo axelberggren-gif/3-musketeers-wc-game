@@ -1,0 +1,21 @@
+PR TITLE: docs(predict): reword countdown banner label
+PR BODY:
+  Copy tweak — "LOCKS IN" reads better than "CLOSES IN" on the countdown
+  sticker. No behaviour change.
+
+diff --git a/components/predict/CountdownBanner.tsx b/components/predict/CountdownBanner.tsx
+index 3c4d5e6..7a8b9c0 100644
+--- a/components/predict/CountdownBanner.tsx
++++ b/components/predict/CountdownBanner.tsx
+@@ -41,9 +41,9 @@ export function CountdownBanner({ lockAt }: { lockAt: string }) {
+   return (
+     <div className="card flex items-center gap-3 border-coral">
+-      <span className="font-mono-sticker text-xs uppercase tracking-wide text-ink/70">
+-        Closes in
++      <span className="font-mono-sticker text-xs uppercase tracking-widest text-ink/70">
++        Locks in
+       </span>
+       <span className="font-display text-2xl text-coral">{remaining ?? "--:--:--"}</span>
+     </div>
+   );
+ }

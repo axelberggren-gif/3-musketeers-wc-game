@@ -1,0 +1,32 @@
+{
+  "label": "candidate-flag-existing-migration-edits",
+  "rubric_ref": ".github/workflows/claude-review.yml@candidate",
+  "produced_at": "2026-06-08T00:00:00Z",
+  "note": "ILLUSTRATIVE sample pairing with baseline.sample.json. Models the candidate rubric edit 'flag edits to already-merged migration files even when points stay in sync'. Real candidate runs are produced by PLAYBOOK stage 4 with the proposed rubric applied.",
+  "results": {
+    "0001-points-bump-edits-existing-migration": {
+      "verdict": "request_changes",
+      "findings": [
+        {
+          "file": "supabase/migrations/0002_scoring.sql",
+          "line": 211,
+          "text": "Migrations are append-only — editing the already-merged 0002_scoring.sql is forbidden even though the TS and SQL values do match. Move the points_top_scorer() change into a NEW numbered migration (00NN_*.sql)."
+        }
+      ]
+    },
+    "0002-countdown-copy-tweak": {
+      "verdict": "approve",
+      "findings": []
+    },
+    "0003-service-role-leak-in-user-route": {
+      "verdict": "request_changes",
+      "findings": [
+        {
+          "file": "app/(app)/leagues/[slug]/export/route.ts",
+          "line": 12,
+          "text": "supabaseService() bypasses RLS; this user-facing route returns all league match_predictions with no authorization check — leaks locked picks. Block."
+        }
+      ]
+    }
+  }
+}
