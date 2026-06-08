@@ -19,13 +19,18 @@ server pages.
   builds the connector paths. Two lifecycle modes, derived from the `locked` prop:
   - **build** (`!locked`) — editable. Each slot is a `MatchCell` with two stacked
     team-lines: click a line to advance that team. A slot is pickable only when **both**
-    contestants are known (top-down fill); an undecided feeder renders
-    `Winner of ESP–DEN` (`feederLabel()` resolves recursively up `BRACKET_UPSTREAM`,
-    falling back to the slot label pre-draw). The **only** free-choice cell is an R32
-    slot before its real fixture is imported — it falls back to a `DropdownCell`
-    (`<select>` over all teams). Once football-data lands a real R32 pairing
-    (`slotMatches[slot]`), that cell shows the two real teams. The Champion (`W`) is a
-    crown-sticker: tap to crown the Final winner, which sets the real `W` pick (+15).
+    contestants are known (top-down fill); an undecided downstream feeder renders
+    `Winner of Quarter-final 1` (`slotFriendlyName()` names the feeding round, no longer
+    recursive team codes). **R32 entry cells are group-qualification matchups, not a
+    dropdown**: each side is an official WC 2026 qualification slot from `R32_QUALIFIERS`
+    (Winner / Runner-up / 3rd of a group) and shows the placeholder label
+    (`Runner-up Group K`, `3rd Group A/B/C/D/F`) until it resolves to a real team —
+    either from the imported real fixture (`slotMatches[slot]`) or from a completed
+    group's winner/runner-up (`groupFinals` prop, computed by `computeGroupFinals()`
+    server-side). Third-place sides resolve only from the imported fixture (no Annex C
+    reproduction). You tap the winner once both sides are real teams, same as every
+    downstream cell. Team-lines display the 3-letter `code` + flag. The Champion (`W`)
+    is a crown-sticker: tap to crown the Final winner, which sets the real `W` pick (+15).
   - **live** (`locked`) — read-only + scored from the `results` prop
     (`{winnerTeamId, homeScore, awayScore, status}` per slot; `W` ← the Final result).
     A FINISHED slot banks its points (green ✓ Won + scoreline footer + `+pts`) or strikes
@@ -106,6 +111,7 @@ server pages.
 
 ## Recent changes
 <!-- Newest first. Keep last 10. One line per entry. -->
+- 2026-06-08: `BracketBuilder` R32 entry cells switched from a free `<select>` dropdown to **group-qualification matchups**. `DropdownCell` + the `optionsFor()`/`options` free-pick path are gone; `contestantsFor("R32-n")` now reads `R32_QUALIFIERS` (official WC 2026 Matches 73–88, `lib/scoring/bracket-tree.ts`) and resolves each side to a real team via the imported real fixture (`slotMatches`) or a completed group's winner/runner-up (new `groupFinals` prop from `computeGroupFinals()`), else shows the qualification placeholder (`Runner-up Group K`, `3rd Group A/B/C/D/F`). Third-place sides fill only from the imported fixture. The `Contestant` union replaced `pending` with `feeder` (downstream, → `slotFriendlyName()` "Winner of Quarter-final 1") + `qualifier` (R32 placeholder label); `feederLabel()` (recursive team codes) removed. Team-lines now show the 3-letter `code` + flag (was `short_name` full name). `bracket/page.tsx` fetches finished group-stage matches and passes `groupFinals`. **Behaviour change:** R32 sides stay placeholders until those groups finish (resolution is API-driven, per the design ask), so the bracket fills in during the tournament rather than being freely pickable beforehand. The `LEFT`/`RIGHT` linear slot tree (R32-1&2 → R16-1) is unchanged and still groups slots for the funnel; scoring is per-slot and unaffected. Tests added to `bracket-tree.test.ts`. No DB/SQL changes.
 - 2026-06-08: `BracketBuilder` mobile fit-up. The Wall Chart's shared `minWidth: 54rem` crammed all 9 columns into ~82px cells on phones (vs ~108px on desktop) and the `clamp(600px, 74vh, 720px)` height collapsed to ~600px there, leaving the 8 stacked R32 cells per column almost no gap. Replaced the inline `minWidth` with a responsive class floor — `min-w-[72rem] lg:min-w-0` (full-size, side-scrolling poster below `lg`; releases the floor so `w-full` fits `max-w-6xl` with no scroll on desktop) — bumped the height to `clamp(720px, 80vh, 800px)`, widened the inter-column gap to `gap-3 sm:gap-4`, and let the scroll wrapper bleed to the screen edge on mobile (`-mx-4 px-4 sm:-mx-1 sm:px-1`). Side-scroll a long way beats illegible slivers. No behaviour/scoring change.
 - 2026-06-08: `BracketBuilder` rebuilt as **"The Wall Chart"** (second design bundle, Direction 1). Replaced the flat `lg:grid-cols-6` grid of `SlotCard`/`MatchSlotPicker`/`DropdownSlotBody` with a symmetric poster (`LEFT`/`RIGHT` halves → centre Final + Champion) drawn with measured SVG elbow connectors (cells tagged `data-slot`; `localBox()` offset-chain + `measure()` in an effect on rAF/`ResizeObserver`/`fonts.ready`). New `MatchCell` shows two clickable team-lines (pickable only when both contestants known — top-down fill) with recursive `Winner of ESP–DEN` pending labels (`feederLabel()` over `BRACKET_UPSTREAM`); R32 pre-draw keeps a compact `DropdownCell`; `W` is a crown-the-Final-winner sticker (still the real +15 slot). New lifecycle modes from `locked`: **build** (editable) and **live** (read-only, scored from a new `results` prop — ✓/✗ marks, scorelines, `PointsHUD` banked `/85`, champion flip, green/red connectors). Page extends the knockout query with `status,winner,home_score,away_score` and maps `W` ← Final. Removed the "Suggest qualifiers" auto-fill (`r32Suggestions` prop, `setBracketPicksBulk` usage) per the design chat — `bracket-tree.ts` helpers + the action remain (now unused). Points come from `bracketPointsForSlot()`; tokens reuse `globals.css` vars. Fit-to-width desktop (no horizontal scroll), full-size side-scrolling poster on mobile (min-width floor — see the newer mobile-fit entry above for the current values).
 - 2026-06-01: `MatchPickCard` re-tap-to-clear now actually clears the pick in the DB. `choose()` sent `next ?? value` to `setMatchPick`, so toggling a tile off cleared the UI optimistically but re-saved the original pick server-side (the action only upserted) and it reappeared on next load — contradicting the documented "re-tap clears the pick" behaviour. Now passes `next` (which is `null` on re-tap); `setMatchPick` accepts `Pick1X2 | null` and DELETEs the `match_predictions` row on null (mirrors `setGroupWinnerPick`). Rollback-on-failure unchanged.

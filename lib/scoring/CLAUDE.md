@@ -16,11 +16,15 @@ Actual point-awarding writes happen in SQL functions (see `supabase/migrations/0
   source for the rank-based dark-horse scoring. Seeded into `teams.fifa_ranking`
   by `supabase/migrations/0005_more_tournament_props.sql`.
 - `bracket-tree.ts` — `BRACKET_UPSTREAM` map encoding which slots feed each
-  knockout slot (R32 pairs → R16-N, R16 pairs → QF-X, etc.) plus
-  `predictedGroupStandings()` and `suggestR32Qualifiers()` for the bracket
-  page's "Suggest qualifiers" button, and `filterSuggestionsByMatchPairs()`
-  which drops suggestions whose team isn't part of the real match for that
-  slot once football-data lands knockout fixtures. Pure functions, no IO.
+  knockout slot (R32 pairs → R16-N, R16 pairs → QF-X, etc.); `R32_QUALIFIERS`,
+  the official WC 2026 R32 matchup map (R32-1..16 = Matches 73–88, each side a
+  `QualSource`: Winner/Runner-up of a group, or 3rd of one of five candidate
+  groups) with `qualSourceLabel()` for placeholder text; `slotFriendlyName()`
+  (slot → "Quarter-final 1" / "Round of 16 #3" / "Final"); `computeGroupFinals()`
+  which derives each group's winner/runner-up from real football-data results
+  once that group is fully played (points → GD → GF → team id). Also the legacy
+  `predictedGroupStandings()` / `suggestR32Qualifiers()` / `filterSuggestionsByMatchPairs()`
+  (now unused by the UI — kept for tests/back-compat). Pure functions, no IO.
 - `first-eliminated.ts` — `isEliminatedFromTournament(team, all)` /
   `firstEliminatedTeamId(all)` + `maxReachablePoints()` and `BEST_THIRDS_ADVANCING`.
   Pure mirror of the SQL `score_first_eliminated()` (migration
@@ -70,6 +74,7 @@ Actual point-awarding writes happen in SQL functions (see `supabase/migrations/0
 
 ## Recent changes
 <!-- Newest first. Keep last 10. One line per entry. -->
+- 2026-06-08: `bracket-tree.ts` gained the R32 group-qualification layer for the bracket UI: `R32_QUALIFIERS` (official WC 2026 Matches 73–88 mapped to slots R32-1..16, **in kickoff/schedule order** to line up with `syncFixtures()`/`deriveBracketSlot()`'s kickoff-order slotting), `QualSource` (`winner`/`runnerup`/`third` of a group), `qualSourceLabel()`, `slotFriendlyName()` (used by `BracketBuilder`'s "Winner of Quarter-final 1" feeder labels), and `computeGroupFinals(matches)` which resolves each group's winner/runner-up from real football-data scores **only once every match in that group is FINISHED** (sort: points → GD → GF → team id; no head-to-head tiebreak — the imported real R32 fixture is authoritative and overrides this). Third-place R32 sides are never resolved here (FIFA's Annex C matrix isn't reproduced) — they fill from the imported fixture. Pure, no IO; tests in `bracket-tree.test.ts`. No point values touched, so points-sync holds.
 - 2026-06-05: New `first-eliminated.ts` (+ `first-eliminated.test.ts`) — pure mirror of the SQL `score_first_eliminated()`, rewritten in migration `0017_fix_first_eliminated_48team.sql` to fix the WC 2026 48-team gap (#81): "out of group top-2" is not elimination because the 8 best third-placed teams also advance. `isEliminatedFromTournament(team, all)` flags a team only when out of BOTH group top-2 AND the best-8-thirds race (`rivals_above >= 3`, or `>= 2` plus `>= 8` other groups whose 3rd-place points floor exceeds the team's ceiling); `firstEliminatedTeamId(all)` picks the earliest-clinched one. Sound/conservative, strict point bounds, no GD/GF tiebreaks. This module is the canonical spec the SQL mirrors — keep them in sync (same philosophy as the points-sync invariant), point value unchanged at 10.
 - 2026-05-27: `filterSuggestionsByMatchPairs(suggestions, slotMatches)` added to `bracket-tree.ts`. Drops a `Qualifier` whose `teamId` isn't one of the two team IDs in `slotMatches[slot]` (when the slot has a real match imported from football-data). Lets the bracket "Suggest qualifiers" button stay accurate after the draw — pre-import the map is empty and every suggestion passes through; post-import we only suggest a team if it's actually playing in that R32 match. Tests cover empty-map passthrough, match+team match, mismatch dropped, and slot-without-match passthrough. New `BracketSlotMatchPair` type exported alongside.
 - 2026-05-27: `suggestR32Qualifiers` capped at 16 picks (one per R32 match slot — `R32-1..R32-16`). Previous version generated up to 32 picks (top-2 per group + best-8 third-place into `R32-25..R32-32`), which produced ghost suggestions for slots that don't exist in `buildSlotDefs()` — `setBracketPicksBulk` would have written orphan `bracket_predictions` rows that no match-import path can ever resolve. New rule: collect group winners + runners-up across all 12 groups (24 candidates), sort by predicted points (alphabetical name tiebreaker), take top 16, place in `R32-1..R32-16` in that order. Third-place teams no longer factor in — each R32 slot represents the **winner** of an R32 match, not a team position. New `R32_SLOT_COUNT = 16` constant pinned in the helper.
