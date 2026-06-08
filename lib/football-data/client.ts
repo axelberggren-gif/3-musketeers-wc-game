@@ -17,7 +17,7 @@ function backoffMs(attempt: number) {
 // underlying reason hung off `.cause`. AbortSignal.timeout() produces a
 // DOMException name "TimeoutError". Both are safe to retry; everything else
 // (4xx-equivalent thrown above, programmer errors) is not.
-function isTransientFetchError(e: unknown): boolean {
+export function isTransientFetchError(e: unknown): boolean {
   if (!e || typeof e !== "object") return false;
   const err = e as { name?: string; message?: string };
   if (err.name === "TimeoutError" || err.name === "AbortError") return true;
