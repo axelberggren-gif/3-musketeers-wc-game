@@ -41,28 +41,20 @@ export default async function OutcomesPage() {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const [tournamentRes, tpRes, propsRes, teamsRes, rankingsRes, playersRes, groupPicksRes] =
-    await Promise.all([
-      supabase.from("tournament").select("*").single(),
-      supabase.from("tournament_predictions").select("*").eq("user_id", user.id).maybeSingle(),
-      supabase
-        .from("player_prop_predictions")
-        .select("prop_key, player_id")
-        .eq("user_id", user.id),
-      // The teams catalogue is split: core columns (always present since 0001)
-      // and a separate fifa_ranking fetch that is allowed to fail. Without the
-      // split a missing 0005 column (e.g. `fifa_ranking`) 400s the whole query
-      // and wipes every team-picker; with the split the dropdowns stay populated
-      // and only the dark-horse ranking sort degrades. The ranking error is
-      // still captured to Sentry so the drift is visible.
-      supabase.from("teams").select("id, name, code, group_letter").order("name"),
-      supabase.from("teams").select("id, fifa_ranking"),
-      fetchAllPlayers(supabase),
-      supabase
-        .from("group_winner_predictions")
-        .select("group_letter, team_id")
-        .eq("user_id", user.id),
-    ]);
+  const [tournamentRes, tpRes, propsRes, teamsRes, rankingsRes, playersRes] = await Promise.all([
+    supabase.from("tournament").select("*").single(),
+    supabase.from("tournament_predictions").select("*").eq("user_id", user.id).maybeSingle(),
+    supabase.from("player_prop_predictions").select("prop_key, player_id").eq("user_id", user.id),
+    // The teams catalogue is split: core columns (always present since 0001)
+    // and a separate fifa_ranking fetch that is allowed to fail. Without the
+    // split a missing 0005 column (e.g. `fifa_ranking`) 400s the whole query
+    // and wipes every team-picker; with the split the dropdowns stay populated
+    // and only the dark-horse ranking sort degrades. The ranking error is
+    // still captured to Sentry so the drift is visible.
+    supabase.from("teams").select("id, name, code, group_letter").order("name"),
+    supabase.from("teams").select("id, fifa_ranking"),
+    fetchAllPlayers(supabase),
+  ]);
 
   // Surface silent-empty failures of the team/player catalogue queries to
   // Sentry. `rankingsRes` is the one expected to fail when 0005 hasn't been
@@ -124,17 +116,6 @@ export default async function OutcomesPage() {
     code: t.code,
     fifa_ranking: rankingByTeamId.get(t.id) ?? null,
   }));
-  const teamsByGroup: Record<string, TeamOption[]> = {};
-  for (const t of teamsRes.data ?? []) {
-    const letter = (t as { group_letter?: string | null }).group_letter ?? null;
-    if (!letter) continue;
-    (teamsByGroup[letter] ??= []).push({
-      id: t.id,
-      name: t.name,
-      code: t.code,
-      fifa_ranking: rankingByTeamId.get(t.id) ?? null,
-    });
-  }
   const players = (playersRes.data ?? []).map((p) => ({
     id: p.id,
     name: p.name,
@@ -142,9 +123,6 @@ export default async function OutcomesPage() {
   }));
   const propPicks = Object.fromEntries(
     (propsRes.data ?? []).map((r) => [r.prop_key as string, r.player_id as string]),
-  ) as Record<string, string | null>;
-  const groupPicks = Object.fromEntries(
-    (groupPicksRes.data ?? []).map((r) => [r.group_letter as string, r.team_id as string]),
   ) as Record<string, string | null>;
 
   const tp = tpRes.data;
@@ -175,7 +153,6 @@ export default async function OutcomesPage() {
       <OutcomesBoard
         teams={teams}
         players={players}
-        teamsByGroup={teamsByGroup}
         initial={{
           winner_team_id: tp?.winner_team_id ?? null,
           runner_up_team_id: tp?.runner_up_team_id ?? null,
@@ -191,7 +168,6 @@ export default async function OutcomesPage() {
         }}
         propPicks={propPicks}
         propDefs={PROP_DEFS}
-        groupPicks={groupPicks}
         locked={locks.round1Locked}
       />
     </main>

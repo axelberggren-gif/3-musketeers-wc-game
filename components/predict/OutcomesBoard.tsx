@@ -15,14 +15,12 @@ import {
 import { TeamSelect, type TeamOption } from "./TeamSelect";
 import { PlayerSelect, type PlayerOption } from "./PlayerSelect";
 import { NumberInput } from "./NumberInput";
-import { GroupWinnerPicker } from "./GroupWinnerPicker";
 
 type SaveResult = { ok: boolean; error?: string };
 
 interface Props {
   teams: TeamOption[];
   players: PlayerOption[];
-  teamsByGroup: Record<string, TeamOption[]>;
   initial: {
     winner_team_id: string | null;
     runner_up_team_id: string | null;
@@ -38,7 +36,6 @@ interface Props {
   };
   propPicks: Record<string, string | null>;
   propDefs: { key: string; label: string }[];
-  groupPicks: Record<string, string | null>;
   locked: boolean;
 }
 
@@ -53,22 +50,17 @@ const ACCENT_SHADOW: Record<Accent, string> = {
   mag: "6px 6px 0 var(--mag)",
 };
 
-const GROUP_LETTERS = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"] as const;
-
 export function OutcomesBoard({
   teams,
   players,
-  teamsByGroup,
   initial,
   propPicks,
   propDefs,
-  groupPicks,
   locked,
 }: Props) {
   // One flat map of every pick → filled? — drives the betting-slip meter. Built
   // up front so it contains *every* key (false ones included) and the totals are
-  // just key/value counts. Group keys are only registered for seeded groups.
-  const seededGroups = GROUP_LETTERS.filter((l) => (teamsByGroup[l] ?? []).length > 0);
+  // just key/value counts.
   const [filled, setFilled] = useState<Record<string, boolean>>(() => {
     const f: Record<string, boolean> = {
       winner: initial.winner_team_id != null,
@@ -85,7 +77,6 @@ export function OutcomesBoard({
       red_cards: initial.total_red_cards_guess != null,
     };
     for (const p of propDefs) f[`prop:${p.key}`] = propPicks[p.key] != null;
-    for (const l of seededGroups) f[`group:${l}`] = groupPicks[l] != null;
     return f;
   });
 
@@ -397,35 +388,6 @@ export function OutcomesBoard({
             </PropCard>
           ))}
         </div>
-      </Zone>
-
-      {/* ── Zone 5 · Group forecast ────────────────────────────────────── */}
-      <Zone
-        kicker="Group forecast"
-        kickerAccent="pitch"
-        title="Call all 12 group winners"
-        blurb="5 pts for every group you nail."
-      >
-        {seededGroups.length === 0 ? (
-          <div className="card text-sm text-ink-soft">
-            Groups haven&rsquo;t been seeded yet — they&rsquo;ll appear here once an admin runs the
-            football-data sync.
-          </div>
-        ) : (
-          <div
-            className="card flex flex-col gap-4"
-            style={{ boxShadow: "6px 6px 0 var(--pitch)" }}
-          >
-            <GroupWinnerPicker
-              teamsByGroup={teamsByGroup}
-              initial={groupPicks}
-              locked={locked}
-              onPicked={(letter, teamId) =>
-                setFilled((f) => ({ ...f, [`group:${letter}`]: teamId != null }))
-              }
-            />
-          </div>
-        )}
       </Zone>
     </div>
   );

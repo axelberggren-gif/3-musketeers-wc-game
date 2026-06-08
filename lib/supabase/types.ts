@@ -189,71 +189,6 @@ export type Database = {
           },
         ];
       };
-      group_settlements: {
-        Row: {
-          group_letter: string;
-          winner_team_id: string | null;
-          settled_at: string;
-        };
-        Insert: {
-          group_letter: string;
-          winner_team_id?: string | null;
-          settled_at?: string;
-        };
-        Update: {
-          group_letter?: string;
-          winner_team_id?: string | null;
-          settled_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "group_settlements_winner_team_id_fkey";
-            columns: ["winner_team_id"];
-            isOneToOne: false;
-            referencedRelation: "teams";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      group_winner_predictions: {
-        Row: {
-          id: string;
-          user_id: string;
-          group_letter: string;
-          team_id: string;
-          submitted_at: string;
-        };
-        Insert: {
-          id?: string;
-          user_id: string;
-          group_letter: string;
-          team_id: string;
-          submitted_at?: string;
-        };
-        Update: {
-          id?: string;
-          user_id?: string;
-          group_letter?: string;
-          team_id?: string;
-          submitted_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "group_winner_predictions_team_id_fkey";
-            columns: ["team_id"];
-            isOneToOne: false;
-            referencedRelation: "teams";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "group_winner_predictions_user_id_fkey";
-            columns: ["user_id"];
-            isOneToOne: false;
-            referencedRelation: "profiles";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
       league_invites: {
         Row: {
           id: string;
@@ -989,10 +924,6 @@ export type Database = {
       };
       score_first_eliminated: {
         Args: Record<PropertyKey, never>;
-        Returns: number;
-      };
-      score_group_winner: {
-        Args: { p_group: string };
         Returns: number;
       };
       score_highest_match_goals_guess: {

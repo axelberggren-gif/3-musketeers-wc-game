@@ -33,7 +33,7 @@ export async function setMatchPick(matchId: string, pick: Pick1X2 | null) {
   }
   if (pick == null) {
     // Re-tapping the selected tile clears the pick — delete the row so UI and
-    // DB agree (mirrors setGroupWinnerPick's null path).
+    // DB agree.
     const { error } = await supabase
       .from("match_predictions")
       .delete()
@@ -120,33 +120,6 @@ export async function setTotalRedCardsGuess(value: number | null) {
     return { ok: false, error: "Pick an integer between 0 and 200." } as const;
   }
   return setTournamentPick({ total_red_cards_guess: value });
-}
-
-export async function setGroupWinnerPick(groupLetter: string, teamId: string | null) {
-  if (!/^[A-L]$/.test(groupLetter)) {
-    return { ok: false, error: "Invalid group letter." } as const;
-  }
-  const { supabase, user } = await authedClient();
-  const locks = await getLocks();
-  if (locks.round1Locked) return { ok: false, error: "Round 1 picks are locked." } as const;
-  if (teamId == null) {
-    const { error } = await supabase
-      .from("group_winner_predictions")
-      .delete()
-      .eq("user_id", user.id)
-      .eq("group_letter", groupLetter);
-    if (error) return { ok: false, error: error.message } as const;
-  } else {
-    const { error } = await supabase
-      .from("group_winner_predictions")
-      .upsert(
-        { user_id: user.id, group_letter: groupLetter, team_id: teamId },
-        { onConflict: "user_id,group_letter" },
-      );
-    if (error) return { ok: false, error: error.message } as const;
-  }
-  revalidatePath("/predict");
-  return { ok: true } as const;
 }
 
 export async function setPlayerProp(propKey: string, playerId: string) {

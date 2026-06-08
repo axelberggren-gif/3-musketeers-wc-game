@@ -73,7 +73,7 @@ export default async function Round1Page() {
           Tap a flag to commit. Picks autosave and can be changed any time before first kickoff.
         </p>
         <p className="text-sm text-ink-soft">
-          Chasing the winner, golden boot, group winners &amp; props?{" "}
+          Chasing the winner, golden boot &amp; props?{" "}
           <Link href="/predict/outcomes" className="font-display uppercase text-coral underline">
             They&rsquo;re on the Outcomes tab →
           </Link>
