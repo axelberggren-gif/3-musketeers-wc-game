@@ -58,6 +58,10 @@ export async function setTournamentPick(values: {
   first_eliminated_team_id?: string | null;
   total_goals_guess?: number | null;
   highest_match_goals_guess?: number | null;
+  final_goals_guess?: number | null;
+  biggest_win_margin_guess?: number | null;
+  golden_boot_goals_guess?: number | null;
+  total_red_cards_guess?: number | null;
 }) {
   const { supabase, user } = await authedClient();
   const locks = await getLocks();
@@ -86,6 +90,36 @@ export async function setHighestMatchGoalsGuess(value: number | null) {
 
 export async function setFirstEliminatedPick(teamId: string | null) {
   return setTournamentPick({ first_eliminated_team_id: teamId });
+}
+
+// Outright numeric props (migration 0020). Ranges mirror the CHECK constraints
+// on tournament_predictions; the DB lock trigger is the real gate.
+export async function setFinalGoalsGuess(value: number | null) {
+  if (value != null && (!Number.isInteger(value) || value < 0 || value > 30)) {
+    return { ok: false, error: "Pick an integer between 0 and 30." } as const;
+  }
+  return setTournamentPick({ final_goals_guess: value });
+}
+
+export async function setBiggestWinMarginGuess(value: number | null) {
+  if (value != null && (!Number.isInteger(value) || value < 0 || value > 30)) {
+    return { ok: false, error: "Pick an integer between 0 and 30." } as const;
+  }
+  return setTournamentPick({ biggest_win_margin_guess: value });
+}
+
+export async function setGoldenBootGoalsGuess(value: number | null) {
+  if (value != null && (!Number.isInteger(value) || value < 0 || value > 30)) {
+    return { ok: false, error: "Pick an integer between 0 and 30." } as const;
+  }
+  return setTournamentPick({ golden_boot_goals_guess: value });
+}
+
+export async function setTotalRedCardsGuess(value: number | null) {
+  if (value != null && (!Number.isInteger(value) || value < 0 || value > 200)) {
+    return { ok: false, error: "Pick an integer between 0 and 200." } as const;
+  }
+  return setTournamentPick({ total_red_cards_guess: value });
 }
 
 export async function setGroupWinnerPick(groupLetter: string, teamId: string | null) {

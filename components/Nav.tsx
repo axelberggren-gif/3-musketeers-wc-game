@@ -27,7 +27,8 @@ export async function Nav() {
           <span className="text-pitch-light text-[0.65em]">&apos;26</span>
         </Link>
         <div className="flex gap-1 sm:gap-1.5 overflow-x-auto -mx-1 px-1">
-          <NavLink href="/predict">Round 1</NavLink>
+          <NavLink href="/predict">Group stage</NavLink>
+          <NavLink href="/predict/outcomes">Outcomes</NavLink>
           <NavLink href="/predict/bracket">Bracket</NavLink>
           <NavLink href="/leagues">Leagues</NavLink>
           {profile?.is_admin && <NavLink href="/admin">Admin</NavLink>}

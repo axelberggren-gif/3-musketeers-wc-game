@@ -848,6 +848,10 @@ export type Database = {
           total_goals_guess: number | null;
           highest_match_goals_guess: number | null;
           first_eliminated_team_id: string | null;
+          final_goals_guess: number | null;
+          biggest_win_margin_guess: number | null;
+          golden_boot_goals_guess: number | null;
+          total_red_cards_guess: number | null;
           submitted_at: string;
         };
         Insert: {
@@ -859,6 +863,10 @@ export type Database = {
           total_goals_guess?: number | null;
           highest_match_goals_guess?: number | null;
           first_eliminated_team_id?: string | null;
+          final_goals_guess?: number | null;
+          biggest_win_margin_guess?: number | null;
+          golden_boot_goals_guess?: number | null;
+          total_red_cards_guess?: number | null;
           submitted_at?: string;
         };
         Update: {
@@ -870,6 +878,10 @@ export type Database = {
           total_goals_guess?: number | null;
           highest_match_goals_guess?: number | null;
           first_eliminated_team_id?: string | null;
+          final_goals_guess?: number | null;
+          biggest_win_margin_guess?: number | null;
+          golden_boot_goals_guess?: number | null;
+          total_red_cards_guess?: number | null;
           submitted_at?: string;
         };
         Relationships: [

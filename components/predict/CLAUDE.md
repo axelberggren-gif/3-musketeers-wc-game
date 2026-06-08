@@ -43,14 +43,25 @@ server pages.
   cells per column keep real spacing on small screens.
   Point values come from `bracketPointsForSlot()` / `POINTS.bracket` — no magic numbers.
 - `CountdownBanner.tsx` — Live countdown to first kickoff / knockout lock.
+- `OutcomesBoard.tsx` — **The "betting slip"**: the whole `/predict/outcomes` page
+  body. Composes the optimistic selectors into a `PropCard` sticker for each
+  tournament-wide prop, grouped into themed zones (The big calls · Boots & bookings ·
+  The numbers game · Wildcards · Group forecast — the last folds in `GroupWinnerPicker`).
+  A flat `filled` map (every pick key → bool, seeded from the server props) drives a live
+  completion meter; each selector's `onSave` is wrapped so a successful save flips the
+  meter bit (the selectors still own the optimistic rollback). `PropCard` is local +
+  presentational (icon, title, points badge, hint, accent shadow, ✓/— footer; the
+  champion card gets the `.holo` foil). No magic point numbers shown — labels are copy.
 - `PlayerSelect.tsx`, `TeamSelect.tsx` — Generic selectors used in tournament/player
-  prop forms. `TeamSelect` supports an optional `showRanking` prop that sorts by
+  prop forms. `label` is **optional** (omit it when a wrapper like `PropCard` owns the
+  title). `TeamSelect` supports an optional `showRanking` prop that sorts by
   `fifa_ranking desc` and labels each option `#<rank> — <name>` (used by the
   dark-horse picker so underdogs surface first).
 - `NumberInput.tsx` — Integer input with the same optimistic-update-with-rollback
-  pattern, used for the total-goals / highest-match-goals tournament guesses.
+  pattern (optional `label`), used for the over-under tournament guesses.
 - `GroupWinnerPicker.tsx` — 12 `TeamSelect`s, one per group (A..L), filtered to that
-  group's teams. Each picks the user's predicted group winner.
+  group's teams. Each picks the user's predicted group winner. Optional `onPicked`
+  callback reports a successful save so a parent (the `OutcomesBoard` meter) can track it.
 - `GroupStageList.tsx` — Owns the group-stage 1X2 match list on `/predict`. Renders
   a sticker filter strip (an "All groups" reset pill + one pill per group letter)
   then re-groups the visible matches by date for the existing date-banner layout.
@@ -58,7 +69,8 @@ server pages.
   it (re-tap clears, tapping a different group switches). Receives plain-object
   props (`Record<>` not `Map`) so React Server Component → Client Component
   serialisation works.
-- `TournamentForm.tsx` — Admin form for tournament key dates.
+- (`TournamentForm.tsx` removed 2026-06-08 — superseded by `OutcomesBoard.tsx`. The
+  unrelated admin key-dates form lives at `app/(app)/admin/tournament/TournamentForm.tsx`.)
 
 ## Conventions
 - Every file starts with `"use client"`. Persistence is via server actions imported
@@ -106,6 +118,7 @@ server pages.
 
 ## Recent changes
 <!-- Newest first. Keep last 10. One line per entry. -->
+- 2026-06-08: New `OutcomesBoard.tsx` (the `/predict/outcomes` body) replaces the old `TournamentForm.tsx` (deleted). It lays the tournament-wide props out as a "betting slip" — a `PropCard` sticker per prop (icon · title · points badge · hint · accent shadow · ✓/— footer; champion card uses `.holo`) grouped into themed zones (The big calls · Boots & bookings · The numbers game · Wildcards · Group forecast, the last folding in `GroupWinnerPicker`). A flat `filled` map seeded from server props drives a live completion meter + progress bar; each selector's `onSave` is wrapped so an `ok` save flips the meter bit (rollback still lives in the selectors). Includes the four new over-under props from migration `0020` (goals in the Final, biggest win margin, golden-boot tally, total red cards) wired to the new `setFinalGoalsGuess` / `setBiggestWinMarginGuess` / `setGoldenBootGoalsGuess` / `setTotalRedCardsGuess` actions. `TeamSelect` / `PlayerSelect` / `NumberInput` gained an optional `label` (omit when `PropCard` owns the title — backward compatible); `GroupWinnerPicker` gained an optional `onPicked` reporter. No new magic numbers (point copy is text); all colours from `globals.css` tokens.
 - 2026-06-08: `MatchPickCard` + `GroupStageList` no longer cause React hydration mismatches once group-stage fixtures are seeded. Both rendered timezone-sensitive output during SSR — `MatchPickCard` via `isoToLocal(kickoff_at)` (`Intl.DateTimeFormat("en-GB", ...)`), and `GroupStageList` via `new Date(kickoff_at).toDateString()` used both as the grouping key and the banner label. Server (Vercel = UTC) and client (user TZ) produced different strings; React tore the DOM. Both now defer the localized swap behind a `requestAnimationFrame`-driven `useState` flag (same pattern as `CountdownBanner`): SSR + first client render emit a stable placeholder (`—` for the kickoff line; `YYYY-MM-DD` ISO date prefix for the banner, also used as the bucket key so the group ordering is identical across runtimes); the effect swaps in the localized value after mount. `suppressHydrationWarning` on the two spans is belt-and-braces. Refs Sentry `JAVASCRIPT-NEXTJS-5`.
 - 2026-06-08: `BracketBuilder` mobile fit-up. The Wall Chart's shared `minWidth: 54rem` crammed all 9 columns into ~82px cells on phones (vs ~108px on desktop) and the `clamp(600px, 74vh, 720px)` height collapsed to ~600px there, leaving the 8 stacked R32 cells per column almost no gap. Replaced the inline `minWidth` with a responsive class floor — `min-w-[72rem] lg:min-w-0` (full-size, side-scrolling poster below `lg`; releases the floor so `w-full` fits `max-w-6xl` with no scroll on desktop) — bumped the height to `clamp(720px, 80vh, 800px)`, widened the inter-column gap to `gap-3 sm:gap-4`, and let the scroll wrapper bleed to the screen edge on mobile (`-mx-4 px-4 sm:-mx-1 sm:px-1`). Side-scroll a long way beats illegible slivers. No behaviour/scoring change.
 - 2026-06-08: `BracketBuilder` rebuilt as **"The Wall Chart"** (second design bundle, Direction 1). Replaced the flat `lg:grid-cols-6` grid of `SlotCard`/`MatchSlotPicker`/`DropdownSlotBody` with a symmetric poster (`LEFT`/`RIGHT` halves → centre Final + Champion) drawn with measured SVG elbow connectors (cells tagged `data-slot`; `localBox()` offset-chain + `measure()` in an effect on rAF/`ResizeObserver`/`fonts.ready`). New `MatchCell` shows two clickable team-lines (pickable only when both contestants known — top-down fill) with recursive `Winner of ESP–DEN` pending labels (`feederLabel()` over `BRACKET_UPSTREAM`); R32 pre-draw keeps a compact `DropdownCell`; `W` is a crown-the-Final-winner sticker (still the real +15 slot). New lifecycle modes from `locked`: **build** (editable) and **live** (read-only, scored from a new `results` prop — ✓/✗ marks, scorelines, `PointsHUD` banked `/85`, champion flip, green/red connectors). Page extends the knockout query with `status,winner,home_score,away_score` and maps `W` ← Final. Removed the "Suggest qualifiers" auto-fill (`r32Suggestions` prop, `setBracketPicksBulk` usage) per the design chat — `bracket-tree.ts` helpers + the action remain (now unused). Points come from `bracketPointsForSlot()`; tokens reuse `globals.css` vars. Fit-to-width desktop (no horizontal scroll), full-size side-scrolling poster on mobile (min-width floor — see the newer mobile-fit entry above for the current values).
