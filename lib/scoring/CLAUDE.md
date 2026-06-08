@@ -37,14 +37,15 @@ Actual point-awarding writes happen in SQL functions (see `supabase/migrations/0
 ## Invariants (do not break)
 - **Points sync** (critical): every numeric value in `POINTS` has a mirrored SQL
   function across `supabase/migrations/0002_scoring.sql`,
-  `supabase/migrations/0005_more_tournament_props.sql` and
-  `supabase/migrations/0020_more_outright_props.sql` (`points_match_1x2`,
+  `supabase/migrations/0005_more_tournament_props.sql`,
+  `supabase/migrations/0020_more_outright_props.sql` and
+  `supabase/migrations/0022_manual_admin_props.sql` (`points_match_1x2`,
   `points_bracket_slot`, `points_tournament_winner`, `points_tournament_runner_up`,
   `points_top_scorer`, `points_player_prop`, `points_total_goals_base`,
   `points_highest_match_base`, `points_troublemaker`,
   `points_first_eliminated`, `points_final_goals_base`,
   `points_biggest_win_margin_base`, `points_golden_boot_goals_base`,
-  `points_total_red_cards_base`). **If you change a value here, you MUST add a new
+  `points_total_red_cards_base`, `points_manual_prop`). **If you change a value here, you MUST add a new
   migration that updates the matching SQL function.** Never edit existing
   migration files directly — migrations are append-only.
 - **Dark-horse rank sync**: `FIFA_RANKINGS_2026` in `fifa-rankings.ts` is the
@@ -73,6 +74,7 @@ Actual point-awarding writes happen in SQL functions (see `supabase/migrations/0
 
 ## Recent changes
 <!-- Newest first. Keep last 10. One line per entry. -->
+- 2026-06-08: Added `POINTS.manualProp` (5), mirrored by `points_manual_prop()` in migration `0022_manual_admin_props.sql` (added to the points-sync invariant list + asserted in `rules.test.ts`). It's the flat value for seven admin-resolved "house special" props (Neymar minutes / streaker / best goalkeeper / golden-boot team / own-goals count / war-game match / Swedish-players count). Five are exact-match (full 5 pts to every correct picker); the two numeric ones (own goals, Swedish players) are closest-guess with ties splitting the base, like total-goals. Scoring is a standalone `score_manual_props()` driver (seven reconciling sub-scorers) that the admin "save results" action calls directly — **not** chained into `score_tournament()`, so these settle whenever the commissioner resolves them rather than waiting for the Final.
 - 2026-06-08: Removed the group-winner prop. `POINTS.tournament.groupWinner` (5 pts) deleted from `rules.ts` (+ its `rules.test.ts` assertion); migration `0021_remove_group_winner_prop.sql` drops `score_group_winner()` / `points_group_winner()`, rewrites `settle_group_stage_props()` to only drive `score_first_eliminated()`, reaps any `tournament:group_winner:%` awards, and drops the `group_winner_predictions` + `group_settlements` tables. The pick was redundant with the group-stage 1X2 picks. Points-sync list above no longer includes `points_group_winner`.
 - 2026-06-08: `POINTS.tournament` gained four over-under bases — `finalGoalsBase` (10), `biggestWinMarginBase` (10), `goldenBootGoalsBase` (10), `totalRedCardsBase` (15) — mirrored by `points_final_goals_base()` / `points_biggest_win_margin_base()` / `points_golden_boot_goals_base()` / `points_total_red_cards_base()` in migration `0020_more_outright_props.sql` (added to the points-sync invariant list + asserted in `rules.test.ts`). Each is a closest-guess prop scored exactly like total-goals (reconcile + ties-split); golden-boot tally + total red cards are **drain-gated** (`all_match_details_synced()`) like top-scorer/troublemaker since they read `player_goal_log` / `player_card_log`. `score_tournament()` was re-created from its 0016 body with the four new sub-scorers appended (the live owner of `score_tournament` is now 0020). No new `score_*` is called from TS — they run inside `score_tournament()`, already invoked by `syncFixtures()` once the Final is FINISHED.
 - 2026-06-05: New `first-eliminated.ts` (+ `first-eliminated.test.ts`) — pure mirror of the SQL `score_first_eliminated()`, rewritten in migration `0017_fix_first_eliminated_48team.sql` to fix the WC 2026 48-team gap (#81): "out of group top-2" is not elimination because the 8 best third-placed teams also advance. `isEliminatedFromTournament(team, all)` flags a team only when out of BOTH group top-2 AND the best-8-thirds race (`rivals_above >= 3`, or `>= 2` plus `>= 8` other groups whose 3rd-place points floor exceeds the team's ceiling); `firstEliminatedTeamId(all)` picks the earliest-clinched one. Sound/conservative, strict point bounds, no GD/GF tiebreaks. This module is the canonical spec the SQL mirrors — keep them in sync (same philosophy as the points-sync invariant), point value unchanged at 10.

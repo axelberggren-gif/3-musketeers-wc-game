@@ -11,16 +11,26 @@ import {
   setBiggestWinMarginGuess,
   setGoldenBootGoalsGuess,
   setTotalRedCardsGuess,
+  setNeymarMinutesPick,
+  setStreakerPick,
+  setBestGoalkeeperPick,
+  setGoldenBootTeamPick,
+  setWarGamePick,
+  setOwnGoalsGuess,
+  setSwedishPlayersGuess,
 } from "@/lib/predictions/actions";
 import { TeamSelect, type TeamOption } from "./TeamSelect";
 import { PlayerSelect, type PlayerOption } from "./PlayerSelect";
 import { NumberInput } from "./NumberInput";
+import { BooleanSelect } from "./BooleanSelect";
+import { MatchSelect, type MatchOption } from "./MatchSelect";
 
 type SaveResult = { ok: boolean; error?: string };
 
 interface Props {
   teams: TeamOption[];
   players: PlayerOption[];
+  groupMatches: MatchOption[];
   initial: {
     winner_team_id: string | null;
     runner_up_team_id: string | null;
@@ -33,6 +43,13 @@ interface Props {
     biggest_win_margin_guess: number | null;
     golden_boot_goals_guess: number | null;
     total_red_cards_guess: number | null;
+    neymar_minutes_pick: boolean | null;
+    streaker_pick: boolean | null;
+    best_goalkeeper_player_id: string | null;
+    golden_boot_team_id: string | null;
+    own_goals_guess: number | null;
+    war_game_match_id: string | null;
+    swedish_players_guess: number | null;
   };
   propPicks: Record<string, string | null>;
   propDefs: { key: string; label: string }[];
@@ -53,6 +70,7 @@ const ACCENT_SHADOW: Record<Accent, string> = {
 export function OutcomesBoard({
   teams,
   players,
+  groupMatches,
   initial,
   propPicks,
   propDefs,
@@ -75,6 +93,13 @@ export function OutcomesBoard({
       win_margin: initial.biggest_win_margin_guess != null,
       golden_boot_goals: initial.golden_boot_goals_guess != null,
       red_cards: initial.total_red_cards_guess != null,
+      neymar: initial.neymar_minutes_pick != null,
+      streaker: initial.streaker_pick != null,
+      best_gk: initial.best_goalkeeper_player_id != null,
+      golden_boot_team: initial.golden_boot_team_id != null,
+      own_goals: initial.own_goals_guess != null,
+      war_game: initial.war_game_match_id != null,
+      swedish_players: initial.swedish_players_guess != null,
     };
     for (const p of propDefs) f[`prop:${p.key}`] = propPicks[p.key] != null;
     return f;
@@ -92,6 +117,13 @@ export function OutcomesBoard({
   }
   function trackNum(key: string, action: (v: number | null) => Promise<SaveResult>) {
     return async (v: number | null) => {
+      const res = await action(v);
+      if (res.ok) setFilled((f) => ({ ...f, [key]: v != null }));
+      return res;
+    };
+  }
+  function trackBool(key: string, action: (v: boolean | null) => Promise<SaveResult>) {
+    return async (v: boolean | null) => {
       const res = await action(v);
       if (res.ok) setFilled((f) => ({ ...f, [key]: v != null }));
       return res;
@@ -387,6 +419,126 @@ export function OutcomesBoard({
               />
             </PropCard>
           ))}
+        </div>
+      </Zone>
+
+      {/* ── Zone 5 · House specials (admin-resolved bar bets) ──────────────── */}
+      <Zone
+        kicker="House specials"
+        kickerAccent="coral"
+        title="The bar bets"
+        blurb="The off-the-books props the data feed can't call. The commissioner settles these by hand once the tournament tells us the answer."
+      >
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          <PropCard
+            icon="⏱️"
+            title="Neymar: 30 mins or bust"
+            points="5 pts"
+            accent="gold"
+            hint="Will Neymar rack up 30 minutes or less of total playing time?"
+            filled={filled.neymar}
+          >
+            <BooleanSelect
+              initial={initial.neymar_minutes_pick}
+              yesLabel="Yes — 30 min or less"
+              noLabel="No — he plays more"
+              disabled={locked}
+              onSave={trackBool("neymar", setNeymarMinutesPick)}
+            />
+          </PropCard>
+          <PropCard
+            icon="🏃"
+            title="Pitch invader"
+            points="5 pts"
+            accent="mag"
+            hint="Will a streaker make it onto the field at any game?"
+            filled={filled.streaker}
+          >
+            <BooleanSelect
+              initial={initial.streaker_pick}
+              yesLabel="Yes — someone runs"
+              noLabel="No streaker"
+              disabled={locked}
+              onSave={trackBool("streaker", setStreakerPick)}
+            />
+          </PropCard>
+          <PropCard
+            icon="🧤"
+            title="Clean-sheet king"
+            points="5 pts"
+            accent="blue"
+            hint="The goalkeeper who keeps the most clean sheets."
+            filled={filled.best_gk}
+          >
+            <PlayerSelect
+              options={players}
+              initial={initial.best_goalkeeper_player_id}
+              disabled={locked}
+              onSave={trackStr("best_gk", setBestGoalkeeperPick)}
+            />
+          </PropCard>
+          <PropCard
+            icon="⚽"
+            title="Top-scoring nation"
+            points="5 pts"
+            accent="gold"
+            hint="Golden Boot, team edition — which country bangs in the most goals."
+            filled={filled.golden_boot_team}
+          >
+            <TeamSelect
+              options={teams}
+              initial={initial.golden_boot_team_id}
+              disabled={locked}
+              onSave={trackStr("golden_boot_team", setGoldenBootTeamPick)}
+            />
+          </PropCard>
+          <PropCard
+            icon="🙃"
+            title="Poopy boot (own goals)"
+            points="5 pts"
+            accent="coral"
+            hint="How many own goals across the whole tournament? Closest wins, ties split."
+            filled={filled.own_goals}
+          >
+            <NumberInput
+              initial={initial.own_goals_guess}
+              min={0}
+              max={50}
+              disabled={locked}
+              onSave={trackNum("own_goals", setOwnGoalsGuess)}
+            />
+          </PropCard>
+          <PropCard
+            icon="🟨"
+            title="The war game"
+            points="5 pts"
+            accent="coral"
+            hint="Which group game collects the most cards (yellows + reds)?"
+            filled={filled.war_game}
+          >
+            <MatchSelect
+              options={groupMatches}
+              initial={initial.war_game_match_id}
+              disabled={locked}
+              onSave={trackStr("war_game", setWarGamePick)}
+            />
+          </PropCard>
+          <PropCard
+            icon="🇸🇪"
+            title="Blågult minutes"
+            points="5 pts"
+            accent="blue"
+            hint="How many different Swedish players get any playing time? Closest wins, ties split."
+            filled={filled.swedish_players}
+          >
+            <NumberInput
+              initial={initial.swedish_players_guess}
+              min={0}
+              max={50}
+              disabled={locked}
+              onSave={trackNum("swedish_players", setSwedishPlayersGuess)}
+            />
+          </PropCard>
         </div>
       </Zone>
     </div>

@@ -35,6 +35,10 @@ describe("POINTS constants", () => {
   it("player prop is 10 pts", () => {
     expect(POINTS.playerProp).toBe(10);
   });
+  it("manual admin prop is 5 pts", () => {
+    // Mirrors points_manual_prop() in 0022_manual_admin_props.sql.
+    expect(POINTS.manualProp).toBe(5);
+  });
 });
 
 describe("bracketPointsForSlot", () => {
