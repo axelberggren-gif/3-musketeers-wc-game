@@ -635,6 +635,52 @@ export type Database = {
           },
         ];
       };
+      league_group_bets: {
+        Row: {
+          league_id: string;
+          voter_id: string;
+          bet_kind: string;
+          votee_id: string;
+          created_at: string;
+        };
+        Insert: {
+          league_id: string;
+          voter_id: string;
+          bet_kind: string;
+          votee_id: string;
+          created_at?: string;
+        };
+        Update: {
+          league_id?: string;
+          voter_id?: string;
+          bet_kind?: string;
+          votee_id?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "league_group_bets_league_id_fkey";
+            columns: ["league_id"];
+            isOneToOne: false;
+            referencedRelation: "leagues";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "league_group_bets_voter_id_fkey";
+            columns: ["voter_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "league_group_bets_votee_id_fkey";
+            columns: ["votee_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       point_awards: {
         Row: {
           id: string;
@@ -642,6 +688,7 @@ export type Database = {
           prediction_type: Database["public"]["Enums"]["prediction_type"];
           prediction_ref: string | null;
           match_id: string | null;
+          league_id: string | null;
           points: number;
           idempotency_key: string;
           awarded_at: string;
@@ -652,6 +699,7 @@ export type Database = {
           prediction_type: Database["public"]["Enums"]["prediction_type"];
           prediction_ref?: string | null;
           match_id?: string | null;
+          league_id?: string | null;
           points: number;
           idempotency_key: string;
           awarded_at?: string;
@@ -662,6 +710,7 @@ export type Database = {
           prediction_type?: Database["public"]["Enums"]["prediction_type"];
           prediction_ref?: string | null;
           match_id?: string | null;
+          league_id?: string | null;
           points?: number;
           idempotency_key?: string;
           awarded_at?: string;
@@ -672,6 +721,13 @@ export type Database = {
             columns: ["match_id"];
             isOneToOne: false;
             referencedRelation: "matches";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "point_awards_league_id_fkey";
+            columns: ["league_id"];
+            isOneToOne: false;
+            referencedRelation: "leagues";
             referencedColumns: ["id"];
           },
           {
@@ -1026,3 +1082,4 @@ export type LeagueStandingsRow = {
   tournament_points: number;
   prop_points: number;
 };
+export type LeagueGroupBet = Tables<"league_group_bets">;

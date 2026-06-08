@@ -15,6 +15,8 @@ import {
 import { TeamSelect, type TeamOption } from "./TeamSelect";
 import { PlayerSelect, type PlayerOption } from "./PlayerSelect";
 import { NumberInput } from "./NumberInput";
+import { LeagueBetsCard } from "@/components/league-bets/LeagueBetsCard";
+import type { VoteTally } from "@/lib/league-bets/shared";
 
 type SaveResult = { ok: boolean; error?: string };
 
@@ -37,6 +39,15 @@ interface Props {
   propPicks: Record<string, string | null>;
   propDefs: { key: string; label: string }[];
   locked: boolean;
+  // One entry per league the user belongs to — the internal-league-bets zone.
+  leagueBets: {
+    leagueId: string;
+    leagueName: string;
+    members: { id: string; label: string }[];
+    selfId: string;
+    initial: { most_points: string | null; least_points: string | null };
+    tallies: Record<string, VoteTally> | null;
+  }[];
 }
 
 type Accent = "ink" | "gold" | "coral" | "pitch" | "blue" | "mag";
@@ -57,6 +68,7 @@ export function OutcomesBoard({
   propPicks,
   propDefs,
   locked,
+  leagueBets,
 }: Props) {
   // One flat map of every pick → filled? — drives the betting-slip meter. Built
   // up front so it contains *every* key (false ones included) and the totals are
@@ -388,6 +400,35 @@ export function OutcomesBoard({
             </PropCard>
           ))}
         </div>
+      </Zone>
+
+      {/* ── Zone 5 · Internal league bets ──────────────────────────────── */}
+      <Zone
+        kicker="Internal league bets"
+        kickerAccent="mag"
+        title="Crown & wooden spoon"
+        blurb="Per-league side bets, settled when the group stage ends — call who tops the table and who props it up. Vote tallies stay hidden until the first kickoff."
+      >
+        {leagueBets.length === 0 ? (
+          <div className="card text-sm text-ink-soft">
+            You&apos;re not in a league yet — join or create one to play the internal bets.
+          </div>
+        ) : (
+          <div className="flex flex-col gap-5">
+            {leagueBets.map((lb) => (
+              <LeagueBetsCard
+                key={lb.leagueId}
+                leagueId={lb.leagueId}
+                leagueName={lb.leagueName}
+                members={lb.members}
+                selfId={lb.selfId}
+                initial={lb.initial}
+                tallies={lb.tallies}
+                locked={locked}
+              />
+            ))}
+          </div>
+        )}
       </Zone>
     </div>
   );

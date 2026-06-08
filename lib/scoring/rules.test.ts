@@ -35,6 +35,12 @@ describe("POINTS constants", () => {
   it("player prop is 10 pts", () => {
     expect(POINTS.playerProp).toBe(10);
   });
+  it("internal league-bet values", () => {
+    // Mirror points_* in 0022_league_internal_bets.sql.
+    expect(POINTS.leagueBet.loserGuess).toBe(5);
+    expect(POINTS.leagueBet.loserPerVote).toBe(2);
+    expect(POINTS.leagueBet.crownPenaltyPerVote).toBe(5);
+  });
 });
 
 describe("bracketPointsForSlot", () => {

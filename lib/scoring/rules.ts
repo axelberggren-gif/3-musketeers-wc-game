@@ -32,6 +32,18 @@ export const POINTS = {
     totalRedCardsBase: 15,
   },
   playerProp: 10,
+  // Internal league bets, settled at group-stage end (migration 0022). These
+  // are LEAGUE-scoped awards (point_awards.league_id set), unlike everything
+  // above. loserGuess: a poop voter who picked the actual group-stage loser.
+  // loserPerVote: paid to the loser, 2 × poop-votes received. crownPenaltyPerVote:
+  // deducted from the group-stage leader, 5 × crown-votes received (applied as a
+  // negative award). Mirrored by points_league_loser_guess() /
+  // points_league_loser_per_vote() / points_league_crown_penalty_per_vote().
+  leagueBet: {
+    loserGuess: 5,
+    loserPerVote: 2,
+    crownPenaltyPerVote: 5,
+  },
 } as const;
 
 export type BracketStage = keyof typeof POINTS.bracket;
