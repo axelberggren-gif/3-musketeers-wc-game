@@ -40,6 +40,10 @@ These templates fix it two ways, matching the code shipped in #109:
 ## Required dashboard settings (companion to these templates)
 - **Email OTP Length** (Auth → Providers → Email): 6–10. Controls the
   `{{ .Token }}` length; not a code change.
+- **Email OTP Expiry** (Auth → Providers → Email): the "expires in 60 minutes"
+  line in both templates is hardcoded to Supabase's 3600s default. If you change
+  the expiry, update that copy in `confirm-signup.html` + `magic-link.html` so it
+  doesn't drift.
 - **Redirect URLs allow-list** (Auth → URL Configuration): the **Site URL** must
   be set, and the allow-list must include the post-verify target the app uses
   (`/auth/callback`, which `emailRedirectTo` points at). `/auth/confirm` is a
