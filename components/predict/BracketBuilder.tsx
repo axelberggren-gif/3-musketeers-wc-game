@@ -381,13 +381,15 @@ export function BracketBuilder({ slots, teams, initial, locked, slotMatches, res
         {mode === "build" ? <StageLegend /> : score && <PointsHUD score={score} />}
       </div>
 
-      {/* the wall chart — fills the container on desktop (no horizontal scroll);
-          scrolls horizontally on narrower screens via the min-width floor. */}
-      <div className="overflow-x-auto -mx-1 px-1">
+      {/* the wall chart — fills the container on desktop (lg+, no horizontal
+          scroll); on phones/tablets it keeps a generous 72rem floor so every cell
+          stays full-size and readable, and the whole poster side-scrolls. We'd far
+          rather scroll a long way than squash the teams into illegible slivers. */}
+      <div className="overflow-x-auto -mx-4 px-4 sm:-mx-1 sm:px-1 pb-3">
         <div
           ref={rootRef}
-          className="relative w-full"
-          style={{ minWidth: "54rem", height: "clamp(600px, 74vh, 720px)" }}
+          className="relative w-full min-w-[72rem] lg:min-w-0"
+          style={{ height: "clamp(720px, 80vh, 800px)" }}
         >
           {/* connectors (under the cells) */}
           <svg
@@ -426,7 +428,7 @@ export function BracketBuilder({ slots, teams, initial, locked, slotMatches, res
           </svg>
 
           {/* columns (above the svg) */}
-          <div className="relative h-full flex items-stretch gap-2 sm:gap-3" style={{ zIndex: 1 }}>
+          <div className="relative h-full flex items-stretch gap-3 sm:gap-4" style={{ zIndex: 1 }}>
             {renderColumn(LEFT.R32)}
             {renderColumn(LEFT.R16)}
             {renderColumn(LEFT.QF)}
