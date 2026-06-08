@@ -10,7 +10,7 @@ export interface TeamOption {
 }
 
 interface Props {
-  label: string;
+  label?: string;
   options: TeamOption[];
   initial: string | null;
   disabled: boolean;
@@ -39,7 +39,7 @@ export function TeamSelect({ label, options, initial, disabled, onSave, showRank
 
   return (
     <div className="flex flex-col gap-2">
-      <label className="label">{label}</label>
+      {label ? <label className="label">{label}</label> : null}
       <select
         value={value ?? ""}
         onChange={handleChange}

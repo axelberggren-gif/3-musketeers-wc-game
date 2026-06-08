@@ -1,41 +1,9 @@
-import * as Sentry from "@sentry/nextjs";
+import Link from "next/link";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { computeLockState } from "@/lib/scoring/lock";
 import { GroupStageList, type GroupStageMatch } from "@/components/predict/GroupStageList";
-import { TournamentForm } from "@/components/predict/TournamentForm";
-import { GroupWinnerPicker } from "@/components/predict/GroupWinnerPicker";
-import type { TeamOption } from "@/components/predict/TeamSelect";
 import { CountdownBanner } from "@/components/predict/CountdownBanner";
 import type { Pick1X2 } from "@/lib/supabase/types";
-
-const PROP_DEFS = [{ key: "first_goal_final", label: "First goal in the Final" }];
-
-type PredictClient = Awaited<ReturnType<typeof supabaseServer>>;
-type PlayerRow = { id: string; name: string; team: { name: string } | null };
-
-// The players catalogue is ~1,100+ rows for WC 2026 (48 teams × full squads),
-// which exceeds PostgREST's default page size. A single `.limit(1000)` silently
-// truncated the top-scorer / troublemaker pickers alphabetically (~"O"), so we
-// range-paginate through every player instead. Ordering by (name, id) keeps the
-// pagination stable even when two players share a name. Returns the same
-// `{ data, error }` shape as a plain query so the existing Sentry capture and the
-// downstream `playersRes.data` mapping stay unchanged.
-async function fetchAllPlayers(client: PredictClient) {
-  const pageSize = 1000;
-  const all: PlayerRow[] = [];
-  for (let from = 0; ; from += pageSize) {
-    const { data, error } = await client
-      .from("players")
-      .select("id, name, team:team_id(name)")
-      .order("name")
-      .order("id")
-      .range(from, from + pageSize - 1);
-    if (error) return { data: null, error };
-    all.push(...((data ?? []) as unknown as PlayerRow[]));
-    if (!data || data.length < pageSize) break;
-  }
-  return { data: all, error: null };
-}
 
 export default async function Round1Page() {
   const supabase = await supabaseServer();
@@ -45,18 +13,7 @@ export default async function Round1Page() {
   if (!user) return null;
 
   const service = supabaseService();
-  const [
-    tournamentRes,
-    matchesRes,
-    picksRes,
-    tpRes,
-    propsRes,
-    teamsRes,
-    rankingsRes,
-    playersRes,
-    groupPicksRes,
-    lastSyncRes,
-  ] = await Promise.all([
+  const [tournamentRes, matchesRes, picksRes, lastSyncRes] = await Promise.all([
     supabase.from("tournament").select("*").single(),
     supabase
       .from("matches")
@@ -66,25 +23,6 @@ export default async function Round1Page() {
       .eq("stage", "GROUP")
       .order("kickoff_at", { ascending: true }),
     supabase.from("match_predictions").select("match_id, pick").eq("user_id", user.id),
-    supabase
-      .from("tournament_predictions")
-      .select("*")
-      .eq("user_id", user.id)
-      .maybeSingle(),
-    supabase.from("player_prop_predictions").select("prop_key, player_id").eq("user_id", user.id),
-    // The teams catalogue is split: core columns (always present since 0001)
-    // and a separate fifa_ranking fetch that is allowed to fail. Without the
-    // split a missing 0005 column (e.g. `fifa_ranking`) 400s the whole query
-    // and wipes every team-picker on /predict; with the split the dropdowns
-    // stay populated and only the dark-horse ranking sort degrades. The
-    // ranking error is still captured to Sentry so the drift is visible.
-    supabase.from("teams").select("id, name, code, group_letter").order("name"),
-    supabase.from("teams").select("id, fifa_ranking"),
-    fetchAllPlayers(supabase),
-    supabase
-      .from("group_winner_predictions")
-      .select("group_letter, team_id")
-      .eq("user_id", user.id),
     service
       .from("external_sync_log")
       .select("ran_at, endpoint, status_code, message")
@@ -94,92 +32,12 @@ export default async function Round1Page() {
       .maybeSingle(),
   ]);
 
-  // Surface silent-empty failures of the team/player catalogue queries to
-  // Sentry. `rankingsRes` is the one expected to fail when 0005 hasn't been
-  // applied (warning, not error: the form still works without ranks); the
-  // other two would actually break the form (error).
-  if (teamsRes.error) {
-    Sentry.captureMessage("predict: teams catalogue query failed", {
-      level: "error",
-      tags: { area: "predict", feature: "tournament_predictions" },
-      extra: {
-        user_id: user.id,
-        pg_code: teamsRes.error.code,
-        pg_message: teamsRes.error.message,
-        pg_details: teamsRes.error.details,
-        pg_hint: teamsRes.error.hint,
-      },
-    });
-  }
-  if (rankingsRes.error) {
-    Sentry.captureMessage("predict: teams ranking query failed", {
-      level: "warning",
-      tags: { area: "predict", feature: "tournament_predictions" },
-      extra: {
-        user_id: user.id,
-        pg_code: rankingsRes.error.code,
-        pg_message: rankingsRes.error.message,
-        pg_details: rankingsRes.error.details,
-        pg_hint: rankingsRes.error.hint,
-      },
-    });
-  }
-  if (playersRes.error) {
-    Sentry.captureMessage("predict: players catalogue query failed", {
-      level: "error",
-      tags: { area: "predict", feature: "tournament_predictions" },
-      extra: {
-        user_id: user.id,
-        pg_code: playersRes.error.code,
-        pg_message: playersRes.error.message,
-        pg_details: playersRes.error.details,
-        pg_hint: playersRes.error.hint,
-      },
-    });
-  }
-
-  const rankingByTeamId = new Map<string, number | null>(
-    (rankingsRes.data ?? []).map((r) => [
-      r.id as string,
-      (r as { fifa_ranking?: number | null }).fifa_ranking ?? null,
-    ]),
-  );
-
   const tournament = tournamentRes.data;
   const locks = computeLockState(tournament);
   const matches = (matchesRes.data ?? []) as unknown as GroupStageMatch[];
   const picksByMatch = Object.fromEntries(
     (picksRes.data ?? []).map((r) => [r.match_id as string, r.pick as Pick1X2]),
   ) as Record<string, Pick1X2>;
-  const propPicks = Object.fromEntries(
-    (propsRes.data ?? []).map((r) => [r.prop_key as string, r.player_id as string]),
-  ) as Record<string, string | null>;
-
-  const teams: TeamOption[] = (teamsRes.data ?? []).map((t) => ({
-    id: t.id,
-    name: t.name,
-    code: t.code,
-    fifa_ranking: rankingByTeamId.get(t.id) ?? null,
-  }));
-  const teamsByGroup: Record<string, TeamOption[]> = {};
-  for (const t of teamsRes.data ?? []) {
-    const letter = (t as { group_letter?: string | null }).group_letter ?? null;
-    if (!letter) continue;
-    (teamsByGroup[letter] ??= []).push({
-      id: t.id,
-      name: t.name,
-      code: t.code,
-      fifa_ranking: rankingByTeamId.get(t.id) ?? null,
-    });
-  }
-  const groupPicks = Object.fromEntries(
-    (groupPicksRes.data ?? []).map((r) => [r.group_letter as string, r.team_id as string]),
-  ) as Record<string, string | null>;
-  const players = (playersRes.data ?? []).map((p) => ({
-    id: p.id,
-    name: p.name,
-    team_name: (p.team as { name: string } | null)?.name ?? null,
-  }));
   const lastSync = lastSyncRes.data as
     | { ran_at: string; endpoint: string; status_code: number | null; message: string | null }
     | null;
@@ -214,56 +72,17 @@ export default async function Round1Page() {
         <p className="text-sm text-ink-soft">
           Tap a flag to commit. Picks autosave and can be changed any time before first kickoff.
         </p>
+        <p className="text-sm text-ink-soft">
+          Chasing the winner, golden boot &amp; props?{" "}
+          <Link href="/predict/outcomes" className="font-display uppercase text-coral underline">
+            They&rsquo;re on the Outcomes tab →
+          </Link>
+        </p>
       </header>
 
       {tournament && (
-        <CountdownBanner
-          target={tournament.first_kickoff_at}
-          label="Round 1 locks in"
-        />
+        <CountdownBanner target={tournament.first_kickoff_at} label="Round 1 locks in" />
       )}
-
-      <section className="card flex flex-col gap-4">
-        <h2 className="font-display uppercase tracking-wide text-lg">
-          Tournament outcomes & player props
-        </h2>
-        <TournamentForm
-          teams={teams}
-          players={players}
-          initial={{
-            winner_team_id: tpRes.data?.winner_team_id ?? null,
-            runner_up_team_id: tpRes.data?.runner_up_team_id ?? null,
-            top_scorer_player_id: tpRes.data?.top_scorer_player_id ?? null,
-            dark_horse_team_id: tpRes.data?.dark_horse_team_id ?? null,
-            first_eliminated_team_id:
-              (tpRes.data as { first_eliminated_team_id?: string | null } | null)
-                ?.first_eliminated_team_id ?? null,
-            total_goals_guess:
-              (tpRes.data as { total_goals_guess?: number | null } | null)?.total_goals_guess ??
-              null,
-            highest_match_goals_guess:
-              (tpRes.data as { highest_match_goals_guess?: number | null } | null)
-                ?.highest_match_goals_guess ?? null,
-          }}
-          propPicks={propPicks}
-          propDefs={PROP_DEFS}
-          locked={locks.round1Locked}
-        />
-      </section>
-
-      <section className="card flex flex-col gap-4">
-        <h2 className="font-display uppercase tracking-wide text-lg">
-          Group winners (5 pts each)
-        </h2>
-        <p className="text-sm text-ink-soft">
-          Pick the team you think finishes 1st in each of the 12 groups.
-        </p>
-        <GroupWinnerPicker
-          teamsByGroup={teamsByGroup}
-          initial={groupPicks}
-          locked={locks.round1Locked}
-        />
-      </section>
 
       <section className="flex flex-col gap-4">
         <div className="flex items-baseline justify-between gap-3 flex-wrap">
