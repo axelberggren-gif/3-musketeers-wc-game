@@ -43,7 +43,7 @@ export default async function OutcomesPage() {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const [tournamentRes, tpRes, propsRes, teamsRes, rankingsRes, playersRes, groupMatches] =
+  const [tournamentRes, tpRes, propsRes, teamsRes, rankingsRes, playersRes, groupMatches, myLeaguesRes] =
     await Promise.all([
       supabase.from("tournament").select("*").single(),
       supabase.from("tournament_predictions").select("*").eq("user_id", user.id).maybeSingle(),
@@ -59,6 +59,8 @@ export default async function OutcomesPage() {
       fetchAllPlayers(supabase),
       // Group fixtures power the "war game" prop picker; empty pre-import.
       fetchGroupMatchOptions(supabase),
+      // Leagues the user belongs to → the internal-league-bets cards.
+      supabase.from("league_members").select("league_id, league:league_id(name)").eq("user_id", user.id),
     ]);
 
   // Surface silent-empty failures of the team/player catalogue queries to
@@ -138,6 +140,69 @@ export default async function OutcomesPage() {
 
   const tp = tpRes.data;
 
+  // Internal league bets — build one card payload per league the user is in.
+  type MemberRow = {
+    league_id: string;
+    user_id: string;
+    profile: { username: string; display_name: string | null } | null;
+  };
+  type BetRow = { league_id: string; voter_id: string; bet_kind: string; votee_id: string };
+  const myLeagues = (myLeaguesRes.data ?? []) as unknown as Array<{
+    league_id: string;
+    league: { name: string } | { name: string }[] | null;
+  }>;
+  const leagueIds = myLeagues.map((l) => l.league_id);
+
+  let allMembers: MemberRow[] = [];
+  let allBets: BetRow[] = [];
+  if (leagueIds.length) {
+    const [membersRes, betsRes] = await Promise.all([
+      supabase
+        .from("league_members")
+        .select("league_id, user_id, profile:user_id(username, display_name)")
+        .in("league_id", leagueIds),
+      supabase
+        .from("league_group_bets")
+        .select("league_id, voter_id, bet_kind, votee_id")
+        .in("league_id", leagueIds),
+    ]);
+    allMembers = (membersRes.data ?? []) as unknown as MemberRow[];
+    allBets = (betsRes.data ?? []) as unknown as BetRow[];
+  }
+
+  const leagueBets = myLeagues.map((lg) => {
+    const leagueRel = Array.isArray(lg.league) ? lg.league[0] : lg.league;
+    const members = allMembers
+      .filter((m) => m.league_id === lg.league_id)
+      .map((m) => ({
+        id: m.user_id,
+        label: m.profile?.display_name ?? m.profile?.username ?? "unknown",
+      }));
+    const mine = allBets.filter((b) => b.league_id === lg.league_id && b.voter_id === user.id);
+    const initial = {
+      most_points: mine.find((b) => b.bet_kind === "most_points")?.votee_id ?? null,
+      least_points: mine.find((b) => b.bet_kind === "least_points")?.votee_id ?? null,
+    };
+    let tallies: Record<string, { crown: number; poop: number }> | null = null;
+    if (locks.round1Locked) {
+      const acc: Record<string, { crown: number; poop: number }> = {};
+      for (const b of allBets.filter((bb) => bb.league_id === lg.league_id)) {
+        const t = (acc[b.votee_id] ??= { crown: 0, poop: 0 });
+        if (b.bet_kind === "most_points") t.crown++;
+        else if (b.bet_kind === "least_points") t.poop++;
+      }
+      tallies = acc;
+    }
+    return {
+      leagueId: lg.league_id,
+      leagueName: leagueRel?.name ?? "League",
+      members,
+      selfId: user.id,
+      initial,
+      tallies,
+    };
+  });
+
   return (
     <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-10 flex flex-col gap-6">
       <header className="flex flex-col gap-3">
@@ -188,6 +253,7 @@ export default async function OutcomesPage() {
         propPicks={propPicks}
         propDefs={PROP_DEFS}
         locked={locks.round1Locked}
+        leagueBets={leagueBets}
       />
     </main>
   );

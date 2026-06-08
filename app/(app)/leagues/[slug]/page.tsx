@@ -4,7 +4,11 @@ import { supabaseServer } from "@/lib/supabase/server";
 import { CountryFlag } from "@/components/CountryFlag";
 import { isoToLocal } from "@/lib/utils";
 import { BanterFeed } from "@/components/banter/BanterFeed";
+import { computeLockState } from "@/lib/scoring/lock";
+import { LeagueBetsCard } from "@/components/league-bets/LeagueBetsCard";
+import { VoteBadges } from "@/components/league-bets/VoteBadges";
 import type { BanterMessage, BanterReply } from "@/lib/supabase/types";
+import type { VoteTally } from "@/lib/league-bets/shared";
 import type { ProfileLite } from "@/components/banter/BanterMessage";
 
 export default async function LeagueHomePage({
@@ -26,7 +30,8 @@ export default async function LeagueHomePage({
     .maybeSingle();
   if (!league) notFound();
 
-  const [standingsRes, upcomingRes, recentRes, messagesRes, membersRes] = await Promise.all([
+  const [standingsRes, upcomingRes, recentRes, messagesRes, membersRes, tournamentRes, betsRes] =
+    await Promise.all([
     supabase
       .from("league_standings")
       .select("*")
@@ -59,6 +64,11 @@ export default async function LeagueHomePage({
       .from("league_members")
       .select("user_id, profile:user_id(username, display_name)")
       .eq("league_id", league.id),
+    supabase.from("tournament").select("*").single(),
+    supabase
+      .from("league_group_bets")
+      .select("voter_id, bet_kind, votee_id")
+      .eq("league_id", league.id),
   ]);
 
   const messagesDesc = (messagesRes.data ?? []) as BanterMessage[];
@@ -79,12 +89,42 @@ export default async function LeagueHomePage({
     (initialReplies[r.message_id] ??= []).push(r);
   }
 
-  const profilesById: Record<string, ProfileLite> = {};
-  for (const row of (membersRes.data ?? []) as Array<{
+  const memberRows = (membersRes.data ?? []) as Array<{
     user_id: string;
     profile: ProfileLite | null;
-  }>) {
+  }>;
+  const profilesById: Record<string, ProfileLite> = {};
+  for (const row of memberRows) {
     if (row.profile) profilesById[row.user_id] = row.profile;
+  }
+
+  // Internal league bets: member dropdown options, the viewer's own votes, and
+  // (only once round 1 locks) the public vote tallies for the 👑 / 💩 badges.
+  const locks = computeLockState(tournamentRes.data);
+  const memberOptions = memberRows.map((m) => ({
+    id: m.user_id,
+    label: m.profile?.display_name ?? m.profile?.username ?? "unknown",
+  }));
+  const allBets = (betsRes.data ?? []) as Array<{
+    voter_id: string;
+    bet_kind: string;
+    votee_id: string;
+  }>;
+  const myVotes = {
+    most_points:
+      allBets.find((b) => b.voter_id === user.id && b.bet_kind === "most_points")?.votee_id ?? null,
+    least_points:
+      allBets.find((b) => b.voter_id === user.id && b.bet_kind === "least_points")?.votee_id ?? null,
+  };
+  let tallies: Record<string, VoteTally> | null = null;
+  if (locks.round1Locked) {
+    const acc: Record<string, VoteTally> = {};
+    for (const b of allBets) {
+      const t = (acc[b.votee_id] ??= { crown: 0, poop: 0 });
+      if (b.bet_kind === "most_points") t.crown++;
+      else if (b.bet_kind === "least_points") t.poop++;
+    }
+    tallies = acc;
   }
 
   return (
@@ -165,12 +205,32 @@ export default async function LeagueHomePage({
                       >
                         {row.display_name ?? row.username}
                       </Link>
+                      {tallies && (
+                        <VoteBadges
+                          crown={tallies[row.user_id ?? ""]?.crown ?? 0}
+                          poop={tallies[row.user_id ?? ""]?.poop ?? 0}
+                        />
+                      )}
                     </span>
                     <span className="font-display text-xl tabular-nums">{row.total_points}</span>
                   </li>
                 ))}
               </ol>
             )}
+          </section>
+
+          <section className="flex flex-col gap-3">
+            <h2 className="font-display uppercase tracking-wide text-base flex items-center gap-2">
+              <span aria-hidden>👑</span> Internal league bets
+            </h2>
+            <LeagueBetsCard
+              leagueId={league.id}
+              members={memberOptions}
+              selfId={user.id}
+              initial={myVotes}
+              tallies={tallies}
+              locked={locks.round1Locked}
+            />
           </section>
 
           <div className="grid md:grid-cols-2 gap-4">
