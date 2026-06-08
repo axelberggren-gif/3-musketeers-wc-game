@@ -12,10 +12,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("username")
+    .select("username, onboarded")
     .eq("id", user.id)
-    .single();
-  Sentry.setUser({ id: user.id, username: profile?.username ?? undefined });
+    .maybeSingle();
+  // Single onboarding gate for every (app) route: un-named users go pick a
+  // username at /welcome (which lives in (auth), outside this gate — no loop).
+  if (!profile || !profile.onboarded) redirect("/welcome");
+  Sentry.setUser({ id: user.id, username: profile.username });
 
   return (
     <>

@@ -1,14 +1,34 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { supabaseServer } from "@/lib/supabase/server";
-import { LoginForm } from "./LoginForm";
+import { sanitizeNext } from "@/lib/profile/validation";
+import { WelcomeForm } from "./WelcomeForm";
 
-export default async function LoginPage() {
+// Onboarding username picker. Lives in (auth) — which has no layout — so the
+// app/(app)/layout.tsx onboarding gate does NOT apply here (no redirect loop).
+// Does its own auth check, mirroring (auth)/login/page.tsx.
+export default async function WelcomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
+  const { next } = await searchParams;
+  const safeNext = sanitizeNext(next);
+
   const supabase = await supabaseServer();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (user) redirect("/leagues");
+  if (!user) redirect("/login");
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("onboarded, username")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  // Already named themselves — don't let them re-enter onboarding.
+  if (profile?.onboarded) redirect(safeNext);
 
   return (
     <main className="flex-1 flex items-center justify-center px-4 py-12 sm:py-20">
@@ -22,25 +42,21 @@ export default async function LoginPage() {
         </Link>
         <div className="card flex flex-col gap-5">
           <span
-            className="badge badge-coral self-start -rotate-2"
+            className="badge badge-gold self-start -rotate-2"
             style={{ boxShadow: "3px 3px 0 var(--ink)" }}
           >
-            No passwords · Email code
+            👋 One last thing
           </span>
           <div className="flex flex-col gap-1.5">
             <h1 className="font-display uppercase text-3xl sm:text-4xl leading-none tracking-tight">
-              Sign in
+              Pick your name
             </h1>
             <p className="text-sm text-ink-soft">
-              We&apos;ll email you a login code. Type it in to sign in — or click the magic link in
-              the same email.
+              This is how you&rsquo;ll show up on every leaderboard and in every league
+              you join. Lowercase letters, numbers and underscores.
             </p>
           </div>
-          <LoginForm />
-        </div>
-        <div className="card !p-4 text-sm flex items-center justify-between gap-3">
-          <span className="text-ink-soft">Got an invite link?</span>
-          <span className="font-mono-sticker text-xs text-ink">paste it into your browser</span>
+          <WelcomeForm next={safeNext} defaultUsername={profile?.username ?? ""} />
         </div>
       </div>
     </main>
