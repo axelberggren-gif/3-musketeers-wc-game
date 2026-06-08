@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { createInvite, revokeInvite } from "@/lib/leagues/actions";
 
 interface Invite {
@@ -58,12 +58,27 @@ export function InviteControls({
 function InviteRow({ invite, leagueSlug }: { invite: Invite; leagueSlug: string }) {
   const [pending, startTransition] = useTransition();
   const [copied, setCopied] = useState(false);
-  const url =
-    typeof window !== "undefined"
-      ? `${window.location.origin}/join/${invite.token}`
-      : `/join/${invite.token}`;
+  // Defer the absolute URL (and the `new Date()`-driven expiry check) until
+  // after mount. `window.location.origin` is undefined during SSR so the
+  // server renders the relative `/join/...` path while the client renders
+  // the absolute `https://...` URL, producing a React hydration mismatch
+  // (Sentry JAVASCRIPT-NEXTJS-5). Same hazard applies to `new Date()` at
+  // the expiry boundary — SSR and client compute "now" at different ms.
+  // SSR + first client render emit the SSR-safe values (relative path,
+  // assume-not-expired); the effect swaps in the client-only values.
+  const relativeUrl = `/join/${invite.token}`;
+  const [url, setUrl] = useState<string>(relativeUrl);
+  const [expired, setExpired] = useState<boolean>(false);
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => {
+      setUrl(`${window.location.origin}/join/${invite.token}`);
+      setExpired(
+        invite.expires_at ? new Date(invite.expires_at) < new Date() : false,
+      );
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [invite.token, invite.expires_at]);
 
-  const expired = invite.expires_at && new Date(invite.expires_at) < new Date();
   const exhausted = invite.max_uses && invite.uses_count >= invite.max_uses;
   const dead = invite.revoked || expired || exhausted;
 
@@ -87,7 +102,12 @@ function InviteRow({ invite, leagueSlug }: { invite: Invite; leagueSlug: string 
       ].join(" ")}
       style={{ boxShadow: "2px 2px 0 var(--ink)" }}
     >
-      <code className="text-xs font-mono-sticker flex-1 truncate text-ink">{url}</code>
+      <code
+        className="text-xs font-mono-sticker flex-1 truncate text-ink"
+        suppressHydrationWarning
+      >
+        {url}
+      </code>
       <span className="font-mono-sticker text-[11px] text-ink-soft tabular-nums">
         {invite.uses_count}/{invite.max_uses ?? "∞"}
       </span>
