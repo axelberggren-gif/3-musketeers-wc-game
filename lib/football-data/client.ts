@@ -3,6 +3,28 @@
 
 const BASE = "https://api.football-data.org/v4";
 
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+function backoffMs(attempt: number) {
+  // 500ms, 1000ms (between attempts 1→2, 2→3).
+  return 500 * 2 ** (attempt - 1);
+}
+
+// Node's undici throws a bare `TypeError: fetch failed` for transient
+// network errors (DNS, TCP reset, TLS handshake, socket hang up) with the
+// underlying reason hung off `.cause`. AbortSignal.timeout() produces a
+// DOMException name "TimeoutError". Both are safe to retry; everything else
+// (4xx-equivalent thrown above, programmer errors) is not.
+function isTransientFetchError(e: unknown): boolean {
+  if (!e || typeof e !== "object") return false;
+  const err = e as { name?: string; message?: string };
+  if (err.name === "TimeoutError" || err.name === "AbortError") return true;
+  if (err.name === "TypeError" && err.message === "fetch failed") return true;
+  return false;
+}
+
 export interface FdMatch {
   id: number;
   utcDate: string;
@@ -62,16 +84,44 @@ export class FootballDataClient {
 
   private async req<T>(path: string): Promise<T> {
     if (!this.token) throw new Error("FOOTBALL_DATA_TOKEN not configured");
-    const res = await fetch(`${BASE}${path}`, {
-      headers: { "X-Auth-Token": this.token },
-      // Avoid Next caching while developing; we rely on cron cadence instead.
-      cache: "no-store",
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(`football-data ${res.status} ${path}: ${text.slice(0, 200)}`);
+    // Retry transient network failures (DNS/TCP/TLS blips that surface as
+    // Node undici's `TypeError: fetch failed`) and 5xx upstream errors with
+    // a short exponential backoff. Per-request timeout via AbortSignal so a
+    // hung socket can't stall the cron handler past the platform's limit.
+    // Total worst-case wall time: ~10s + 0.5s + 10s + 1s + 10s ≈ 31.5s.
+    const MAX_ATTEMPTS = 3;
+    const TIMEOUT_MS = 10_000;
+    let lastErr: unknown;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        const res = await fetch(`${BASE}${path}`, {
+          headers: { "X-Auth-Token": this.token },
+          // Avoid Next caching while developing; we rely on cron cadence instead.
+          cache: "no-store",
+          signal: AbortSignal.timeout(TIMEOUT_MS),
+        });
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          // Retry 5xx (upstream transient); fail-fast on 4xx (our bug).
+          if (res.status >= 500 && attempt < MAX_ATTEMPTS) {
+            lastErr = new Error(`football-data ${res.status} ${path}: ${text.slice(0, 200)}`);
+            await sleep(backoffMs(attempt));
+            continue;
+          }
+          throw new Error(`football-data ${res.status} ${path}: ${text.slice(0, 200)}`);
+        }
+        return (await res.json()) as T;
+      } catch (e) {
+        lastErr = e;
+        // Only retry network-level / timeout failures. Anything thrown above
+        // with a `football-data <status>` message is from the non-ok branch
+        // (already a final 4xx, since we `continue`'d on 5xx) — don't loop.
+        if (!isTransientFetchError(e) || attempt >= MAX_ATTEMPTS) throw e;
+        await sleep(backoffMs(attempt));
+      }
     }
-    return (await res.json()) as T;
+    // Unreachable — the loop either returns or throws. Satisfy TS.
+    throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
   }
 
   async teams(): Promise<{ teams: FdTeam[] }> {
