@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { setMatchPick } from "@/lib/predictions/actions";
 import type { Pick1X2 } from "@/lib/supabase/types";
 import { CountryFlag } from "@/components/CountryFlag";
@@ -32,6 +32,22 @@ export function MatchPickCard({ match, initialPick, locked }: Props) {
   const [pick, setPick] = useState<Pick1X2 | null>(initialPick);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  // Defer locale-formatted kickoff text until after mount. `isoToLocal` uses
+  // `Intl.DateTimeFormat` which renders in the runtime's timezone; SSR (UTC)
+  // and the user's browser disagree, producing a React hydration mismatch
+  // (Sentry JAVASCRIPT-NEXTJS-5). SSR + first client render both emit the
+  // ISO placeholder, then the effect swaps in the localized string.
+  const [kickoffLabel, setKickoffLabel] = useState<string | null>(null);
+  useEffect(() => {
+    // Defer the locale-formatted swap to a separate frame so the initial
+    // hydration render still emits the placeholder (matching the SSR HTML)
+    // before React commits the localized value — same pattern as
+    // CountdownBanner.
+    const raf = requestAnimationFrame(() =>
+      setKickoffLabel(isoToLocal(match.kickoff_at)),
+    );
+    return () => cancelAnimationFrame(raf);
+  }, [match.kickoff_at]);
 
   function choose(value: Pick1X2) {
     if (locked || pending) return;
@@ -54,8 +70,11 @@ export function MatchPickCard({ match, initialPick, locked }: Props) {
         <span className="badge !text-[10px]">
           {match.group_letter ? `Group ${match.group_letter}` : "Group"}
         </span>
-        <span className="font-mono-sticker text-[11px] text-ink-soft uppercase tracking-wider">
-          {isoToLocal(match.kickoff_at)}
+        <span
+          className="font-mono-sticker text-[11px] text-ink-soft uppercase tracking-wider"
+          suppressHydrationWarning
+        >
+          {kickoffLabel ?? "—"}
         </span>
         {locked ? (
           <span className="badge badge-ink">Locked</span>
