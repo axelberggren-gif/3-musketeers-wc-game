@@ -9,7 +9,8 @@ import { fetchGroupMatchOptions } from "@/lib/predictions/group-matches";
 const PROP_DEFS = [{ key: "first_goal_final", label: "First goal in the Final" }];
 
 type PredictClient = Awaited<ReturnType<typeof supabaseServer>>;
-type PlayerRow = { id: string; name: string; team: { name: string } | null };
+type PlayerTeam = { name: string; code: string | null; crest_url: string | null };
+type PlayerRow = { id: string; name: string; position: string | null; team: PlayerTeam | null };
 
 // The players catalogue is ~1,100+ rows for WC 2026 (48 teams × full squads),
 // which exceeds PostgREST's default page size. A single `.limit(1000)` silently
@@ -24,7 +25,7 @@ async function fetchAllPlayers(client: PredictClient) {
   for (let from = 0; ; from += pageSize) {
     const { data, error } = await client
       .from("players")
-      .select("id, name, team:team_id(name)")
+      .select("id, name, position, team:team_id(name, code, crest_url)")
       .order("name")
       .order("id")
       .range(from, from + pageSize - 1);
@@ -120,11 +121,17 @@ export default async function OutcomesPage() {
     code: t.code,
     fifa_ranking: rankingByTeamId.get(t.id) ?? null,
   }));
-  const players = (playersRes.data ?? []).map((p) => ({
-    id: p.id,
-    name: p.name,
-    team_name: (p.team as { name: string } | null)?.name ?? null,
-  }));
+  const players = (playersRes.data ?? []).map((p) => {
+    const team = p.team;
+    return {
+      id: p.id,
+      name: p.name,
+      position: p.position,
+      team_name: team?.name ?? null,
+      team_code: team?.code ?? null,
+      team_crest: team?.crest_url ?? null,
+    };
+  });
   const propPicks = Object.fromEntries(
     (propsRes.data ?? []).map((r) => [r.prop_key as string, r.player_id as string]),
   ) as Record<string, string | null>;
