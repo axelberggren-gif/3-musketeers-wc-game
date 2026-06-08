@@ -9,7 +9,7 @@ export interface PlayerOption {
 }
 
 interface Props {
-  label: string;
+  label?: string;
   options: PlayerOption[];
   initial: string | null;
   disabled: boolean;
@@ -37,7 +37,7 @@ export function PlayerSelect({ label, options, initial, disabled, onSave }: Prop
 
   return (
     <div className="flex flex-col gap-2">
-      <label className="label">{label}</label>
+      {label ? <label className="label">{label}</label> : null}
       <select
         value={value ?? ""}
         onChange={handleChange}

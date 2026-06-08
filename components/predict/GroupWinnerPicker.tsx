@@ -7,11 +7,13 @@ interface Props {
   teamsByGroup: Record<string, TeamOption[]>;
   initial: Record<string, string | null>;
   locked: boolean;
+  /** Reports a successful save so a parent completion meter can track groups. */
+  onPicked?: (letter: string, teamId: string | null) => void;
 }
 
 const GROUP_LETTERS = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"] as const;
 
-export function GroupWinnerPicker({ teamsByGroup, initial, locked }: Props) {
+export function GroupWinnerPicker({ teamsByGroup, initial, locked, onPicked }: Props) {
   return (
     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
       {GROUP_LETTERS.map((letter) => {
@@ -24,7 +26,11 @@ export function GroupWinnerPicker({ teamsByGroup, initial, locked }: Props) {
             options={options}
             initial={initial[letter] ?? null}
             disabled={locked}
-            onSave={(id) => setGroupWinnerPick(letter, id)}
+            onSave={async (id) => {
+              const res = await setGroupWinnerPick(letter, id);
+              if (res.ok) onPicked?.(letter, id);
+              return res;
+            }}
           />
         );
       })}

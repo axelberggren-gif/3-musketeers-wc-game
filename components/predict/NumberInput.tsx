@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 
 interface Props {
-  label: string;
+  label?: string;
   initial: number | null;
   min: number;
   max: number;
@@ -36,7 +36,7 @@ export function NumberInput({ label, initial, min, max, disabled, onSave }: Prop
 
   return (
     <div className="flex flex-col gap-2">
-      <label className="label">{label}</label>
+      {label ? <label className="label">{label}</label> : null}
       <input
         type="number"
         inputMode="numeric"

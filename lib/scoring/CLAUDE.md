@@ -36,12 +36,15 @@ Actual point-awarding writes happen in SQL functions (see `supabase/migrations/0
 
 ## Invariants (do not break)
 - **Points sync** (critical): every numeric value in `POINTS` has a mirrored SQL
-  function across `supabase/migrations/0002_scoring.sql` and
-  `supabase/migrations/0005_more_tournament_props.sql` (`points_match_1x2`,
+  function across `supabase/migrations/0002_scoring.sql`,
+  `supabase/migrations/0005_more_tournament_props.sql` and
+  `supabase/migrations/0020_more_outright_props.sql` (`points_match_1x2`,
   `points_bracket_slot`, `points_tournament_winner`, `points_tournament_runner_up`,
   `points_top_scorer`, `points_player_prop`, `points_total_goals_base`,
   `points_highest_match_base`, `points_troublemaker`, `points_group_winner`,
-  `points_first_eliminated`). **If you change a value here, you MUST add a new
+  `points_first_eliminated`, `points_final_goals_base`,
+  `points_biggest_win_margin_base`, `points_golden_boot_goals_base`,
+  `points_total_red_cards_base`). **If you change a value here, you MUST add a new
   migration that updates the matching SQL function.** Never edit existing
   migration files directly — migrations are append-only.
 - **Dark-horse rank sync**: `FIFA_RANKINGS_2026` in `fifa-rankings.ts` is the
@@ -70,6 +73,7 @@ Actual point-awarding writes happen in SQL functions (see `supabase/migrations/0
 
 ## Recent changes
 <!-- Newest first. Keep last 10. One line per entry. -->
+- 2026-06-08: `POINTS.tournament` gained four over-under bases — `finalGoalsBase` (10), `biggestWinMarginBase` (10), `goldenBootGoalsBase` (10), `totalRedCardsBase` (15) — mirrored by `points_final_goals_base()` / `points_biggest_win_margin_base()` / `points_golden_boot_goals_base()` / `points_total_red_cards_base()` in migration `0020_more_outright_props.sql` (added to the points-sync invariant list + asserted in `rules.test.ts`). Each is a closest-guess prop scored exactly like total-goals (reconcile + ties-split); golden-boot tally + total red cards are **drain-gated** (`all_match_details_synced()`) like top-scorer/troublemaker since they read `player_goal_log` / `player_card_log`. `score_tournament()` was re-created from its 0016 body with the four new sub-scorers appended (the live owner of `score_tournament` is now 0020). No new `score_*` is called from TS — they run inside `score_tournament()`, already invoked by `syncFixtures()` once the Final is FINISHED.
 - 2026-06-05: New `first-eliminated.ts` (+ `first-eliminated.test.ts`) — pure mirror of the SQL `score_first_eliminated()`, rewritten in migration `0017_fix_first_eliminated_48team.sql` to fix the WC 2026 48-team gap (#81): "out of group top-2" is not elimination because the 8 best third-placed teams also advance. `isEliminatedFromTournament(team, all)` flags a team only when out of BOTH group top-2 AND the best-8-thirds race (`rivals_above >= 3`, or `>= 2` plus `>= 8` other groups whose 3rd-place points floor exceeds the team's ceiling); `firstEliminatedTeamId(all)` picks the earliest-clinched one. Sound/conservative, strict point bounds, no GD/GF tiebreaks. This module is the canonical spec the SQL mirrors — keep them in sync (same philosophy as the points-sync invariant), point value unchanged at 10.
 - 2026-05-27: `filterSuggestionsByMatchPairs(suggestions, slotMatches)` added to `bracket-tree.ts`. Drops a `Qualifier` whose `teamId` isn't one of the two team IDs in `slotMatches[slot]` (when the slot has a real match imported from football-data). Lets the bracket "Suggest qualifiers" button stay accurate after the draw — pre-import the map is empty and every suggestion passes through; post-import we only suggest a team if it's actually playing in that R32 match. Tests cover empty-map passthrough, match+team match, mismatch dropped, and slot-without-match passthrough. New `BracketSlotMatchPair` type exported alongside.
 - 2026-05-27: `suggestR32Qualifiers` capped at 16 picks (one per R32 match slot — `R32-1..R32-16`). Previous version generated up to 32 picks (top-2 per group + best-8 third-place into `R32-25..R32-32`), which produced ghost suggestions for slots that don't exist in `buildSlotDefs()` — `setBracketPicksBulk` would have written orphan `bracket_predictions` rows that no match-import path can ever resolve. New rule: collect group winners + runners-up across all 12 groups (24 candidates), sort by predicted points (alphabetical name tiebreaker), take top 16, place in `R32-1..R32-16` in that order. Third-place teams no longer factor in — each R32 slot represents the **winner** of an R32 match, not a team position. New `R32_SLOT_COUNT = 16` constant pinned in the helper.
