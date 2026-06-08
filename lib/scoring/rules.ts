@@ -32,6 +32,11 @@ export const POINTS = {
     totalRedCardsBase: 15,
   },
   playerProp: 10,
+  // Admin-resolved "house special" props (migration 0022): Neymar minutes,
+  // streaker, best goalkeeper, golden-boot team, own-goals count, war-game
+  // match, Swedish-players count. Flat 5 pts each (numeric ones split ties).
+  // Mirrored by points_manual_prop() in 0022_manual_admin_props.sql.
+  manualProp: 5,
 } as const;
 
 export type BracketStage = keyof typeof POINTS.bracket;
