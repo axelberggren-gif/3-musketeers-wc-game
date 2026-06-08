@@ -4,14 +4,19 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import type { LeagueStandingsRow } from "@/lib/supabase/types";
+import { VoteBadges } from "@/components/league-bets/VoteBadges";
+import type { VoteTally } from "@/lib/league-bets/shared";
 
 interface Props {
   leagueId: string;
   initialRows: LeagueStandingsRow[];
   currentUserId: string | null;
+  // Per-member 👑 / 💩 vote counts (empty until round 1 locks). Static — votes
+  // lock at first kickoff, so no realtime needed here.
+  tallies: Record<string, VoteTally>;
 }
 
-export function LeaderboardLive({ leagueId, initialRows, currentUserId }: Props) {
+export function LeaderboardLive({ leagueId, initialRows, currentUserId, tallies }: Props) {
   const [rows, setRows] = useState(initialRows);
 
   useEffect(() => {
@@ -90,8 +95,14 @@ export function LeaderboardLive({ leagueId, initialRows, currentUserId }: Props)
                   </span>
                 )}
               </div>
-              <div className="font-mono-sticker text-[11px] text-ink-soft truncate">
-                @{row.username}
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="font-mono-sticker text-[11px] text-ink-soft truncate">
+                  @{row.username}
+                </span>
+                <VoteBadges
+                  crown={tallies[row.user_id]?.crown ?? 0}
+                  poop={tallies[row.user_id]?.poop ?? 0}
+                />
               </div>
             </div>
             <div className="hidden sm:flex flex-col items-center">

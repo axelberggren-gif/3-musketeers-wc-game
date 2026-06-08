@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { supabaseServer } from "@/lib/supabase/server";
+import { computeLockState } from "@/lib/scoring/lock";
 import type { LeagueStandingsRow } from "@/lib/supabase/types";
+import type { VoteTally } from "@/lib/league-bets/shared";
 import { LeaderboardLive } from "./LeaderboardLive";
 
 export default async function LeaderboardPage({
@@ -21,11 +23,27 @@ export default async function LeaderboardPage({
     .maybeSingle();
   if (!league) notFound();
 
-  const { data: rows } = await supabase
-    .from("league_standings")
-    .select("*")
-    .eq("league_id", league.id)
-    .order("total_points", { ascending: false });
+  const [rowsRes, tournamentRes, betsRes] = await Promise.all([
+    supabase
+      .from("league_standings")
+      .select("*")
+      .eq("league_id", league.id)
+      .order("total_points", { ascending: false }),
+    supabase.from("tournament").select("*").single(),
+    supabase.from("league_group_bets").select("bet_kind, votee_id").eq("league_id", league.id),
+  ]);
+  const rows = rowsRes.data;
+
+  // 👑 / 💩 vote tallies, revealed only once round 1 locks (RLS would only return
+  // the viewer's own votes before then, so the counts would be wrong anyway).
+  const tallies: Record<string, VoteTally> = {};
+  if (computeLockState(tournamentRes.data).round1Locked) {
+    for (const b of (betsRes.data ?? []) as Array<{ bet_kind: string; votee_id: string }>) {
+      const t = (tallies[b.votee_id] ??= { crown: 0, poop: 0 });
+      if (b.bet_kind === "most_points") t.crown++;
+      else if (b.bet_kind === "least_points") t.poop++;
+    }
+  }
 
   return (
     <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-10 flex flex-col gap-6">
@@ -54,6 +72,7 @@ export default async function LeaderboardPage({
         leagueId={league.id}
         initialRows={(rows ?? []) as LeagueStandingsRow[]}
         currentUserId={user?.id ?? null}
+        tallies={tallies}
       />
     </main>
   );

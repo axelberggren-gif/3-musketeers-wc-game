@@ -39,6 +39,12 @@ describe("POINTS constants", () => {
     // Mirrors points_manual_prop() in 0022_manual_admin_props.sql.
     expect(POINTS.manualProp).toBe(5);
   });
+  it("internal league-bet values", () => {
+    // Mirror points_* in 0023_league_internal_bets.sql.
+    expect(POINTS.leagueBet.loserGuess).toBe(5);
+    expect(POINTS.leagueBet.loserPerVote).toBe(2);
+    expect(POINTS.leagueBet.crownPenaltyPerVote).toBe(5);
+  });
 });
 
 describe("bracketPointsForSlot", () => {

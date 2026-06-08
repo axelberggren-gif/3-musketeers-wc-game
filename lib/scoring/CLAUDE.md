@@ -43,13 +43,16 @@ Actual point-awarding writes happen in SQL functions (see `supabase/migrations/0
   function across `supabase/migrations/0002_scoring.sql`,
   `supabase/migrations/0005_more_tournament_props.sql`,
   `supabase/migrations/0020_more_outright_props.sql` and
-  `supabase/migrations/0022_manual_admin_props.sql` (`points_match_1x2`,
+  `supabase/migrations/0022_manual_admin_props.sql` and
+  `supabase/migrations/0023_league_internal_bets.sql` (`points_match_1x2`,
   `points_bracket_slot`, `points_tournament_winner`, `points_tournament_runner_up`,
   `points_top_scorer`, `points_player_prop`, `points_total_goals_base`,
   `points_highest_match_base`, `points_troublemaker`,
   `points_first_eliminated`, `points_final_goals_base`,
   `points_biggest_win_margin_base`, `points_golden_boot_goals_base`,
-  `points_total_red_cards_base`, `points_manual_prop`). **If you change a value here, you MUST add a new
+  `points_total_red_cards_base`, `points_manual_prop`, `points_league_loser_guess`,
+  `points_league_loser_per_vote`, `points_league_crown_penalty_per_vote`).
+  **If you change a value here, you MUST add a new
   migration that updates the matching SQL function.** Never edit existing
   migration files directly — migrations are append-only.
 - **Dark-horse rank sync**: `FIFA_RANKINGS_2026` in `fifa-rankings.ts` is the
@@ -78,6 +81,7 @@ Actual point-awarding writes happen in SQL functions (see `supabase/migrations/0
 
 ## Recent changes
 <!-- Newest first. Keep last 10. One line per entry. -->
+- 2026-06-08: Added `POINTS.leagueBet` (`loserGuess` 5, `loserPerVote` 2, `crownPenaltyPerVote` 5) for the internal league bets, mirrored by `points_league_loser_guess()` / `points_league_loser_per_vote()` / `points_league_crown_penalty_per_vote()` in migration `0023_league_internal_bets.sql` (added to the points-sync invariant list above + asserted in `rules.test.ts`). These are **league-scoped** awards (`point_awards.league_id`), unlike every other `POINTS.*` value, and the crown penalty is applied as a negative award. Scored by the new reconcile scorer `score_league_group_bets()` (in 0023), driven from `settle_group_stage_props()` once the group stage is FINISHED — not called from TS.
 - 2026-06-08: `bracket-tree.ts` gained the R32 group-qualification layer for the bracket UI: `R32_QUALIFIERS` (official WC 2026 Matches 73–88 mapped to slots R32-1..16, **in kickoff/schedule order** to line up with `syncFixtures()`/`deriveBracketSlot()`'s kickoff-order slotting), `QualSource` (`winner`/`runnerup`/`third` of a group), `qualSourceLabel()`, `slotFriendlyName()` (used by `BracketBuilder`'s "Winner of Quarter-final 1" feeder labels), and `computeGroupFinals(matches)` which resolves each group's winner/runner-up from real football-data scores **only once every match in that group is FINISHED** (sort: points → GD → GF → team id; no head-to-head tiebreak — the imported real R32 fixture is authoritative and overrides this). Third-place R32 sides are never resolved here (FIFA's Annex C matrix isn't reproduced) — they fill from the imported fixture. Pure, no IO; tests in `bracket-tree.test.ts`. No point values touched, so points-sync holds.
 - 2026-06-08: Added `POINTS.manualProp` (5), mirrored by `points_manual_prop()` in migration `0022_manual_admin_props.sql` (added to the points-sync invariant list + asserted in `rules.test.ts`). It's the flat value for seven admin-resolved "house special" props (Neymar minutes / streaker / best goalkeeper / golden-boot team / own-goals count / war-game match / Swedish-players count). Five are exact-match (full 5 pts to every correct picker); the two numeric ones (own goals, Swedish players) are closest-guess with ties splitting the base, like total-goals. Scoring is a standalone `score_manual_props()` driver (seven reconciling sub-scorers) that the admin "save results" action calls directly — **not** chained into `score_tournament()`, so these settle whenever the commissioner resolves them rather than waiting for the Final.
 - 2026-06-08: Removed the group-winner prop. `POINTS.tournament.groupWinner` (5 pts) deleted from `rules.ts` (+ its `rules.test.ts` assertion); migration `0021_remove_group_winner_prop.sql` drops `score_group_winner()` / `points_group_winner()`, rewrites `settle_group_stage_props()` to only drive `score_first_eliminated()`, reaps any `tournament:group_winner:%` awards, and drops the `group_winner_predictions` + `group_settlements` tables. The pick was redundant with the group-stage 1X2 picks. Points-sync list above no longer includes `points_group_winner`.
