@@ -9,6 +9,7 @@ import {
   type SlotResult,
 } from "@/components/predict/BracketBuilder";
 import { CountdownBanner } from "@/components/predict/CountdownBanner";
+import { computeGroupFinals, type RealGroupMatch } from "@/lib/scoring/bracket-tree";
 
 const KNOCKOUT_STAGES = ["R32", "R16", "QF", "SF", "F"] as const;
 
@@ -19,18 +20,26 @@ export default async function BracketPage() {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const [tournamentRes, teamsRes, picksRes, knockoutMatchesRes] = await Promise.all([
-    supabase.from("tournament").select("*").single(),
-    supabase
-      .from("teams")
-      .select("id, name, short_name, code, crest_url")
-      .order("name"),
-    supabase.from("bracket_predictions").select("bracket_slot, team_id").eq("user_id", user.id),
-    supabase
-      .from("matches")
-      .select("bracket_slot, home_team_id, away_team_id, status, winner, home_score, away_score")
-      .in("stage", KNOCKOUT_STAGES),
-  ]);
+  const [tournamentRes, teamsRes, picksRes, knockoutMatchesRes, groupMatchesRes] =
+    await Promise.all([
+      supabase.from("tournament").select("*").single(),
+      supabase
+        .from("teams")
+        .select("id, name, short_name, code, crest_url")
+        .order("name"),
+      supabase.from("bracket_predictions").select("bracket_slot, team_id").eq("user_id", user.id),
+      supabase
+        .from("matches")
+        .select("bracket_slot, home_team_id, away_team_id, status, winner, home_score, away_score")
+        .in("stage", KNOCKOUT_STAGES),
+      // Group-stage results feed the R32 entry cells: once a group is fully
+      // played we resolve its winner / runner-up into the matching qualification
+      // slot. Third-place slots are filled by the imported real R32 fixture.
+      supabase
+        .from("matches")
+        .select("group_letter, home_team_id, away_team_id, status, home_score, away_score")
+        .eq("stage", "GROUP"),
+    ]);
 
   const tournament = tournamentRes.data;
   const locks = computeLockState(tournament);
@@ -66,6 +75,11 @@ export default async function BracketPage() {
   // The champion (`W`) is scored off the Final match.
   if (results["F"]) results["W"] = results["F"];
 
+  // Real group winners / runners-up per completed group, for the R32 cells.
+  const groupFinals = computeGroupFinals(
+    (groupMatchesRes.data ?? []) as unknown as RealGroupMatch[],
+  );
+
   const slots = buildSlotDefs();
 
   return (
@@ -82,9 +96,10 @@ export default async function BracketPage() {
         </h1>
         <p className="text-sm text-ink-soft">
           Fill your knockout bracket end to end — Round of 32 through the Final, then crown your
-          champion. Pick a winner per match and they flow into the next round; slots you haven&rsquo;t
-          reached yet read &ldquo;Winner of …&rdquo; until their feeder is decided. Locks at the start
-          of R32, then scores itself live as results land.
+          champion. Each R32 tie fills in from the group stage (Winner / Runner-up / 3rd of each
+          group) as those groups finish; pick a winner per match and they flow into the next round.
+          Slots you haven&rsquo;t reached yet read &ldquo;Winner of …&rdquo; until their feeder is
+          decided. Locks at the start of R32, then scores itself live as results land.
         </p>
       </header>
 
@@ -98,6 +113,7 @@ export default async function BracketPage() {
         initial={initial}
         locked={locks.round2Locked}
         slotMatches={slotMatches}
+        groupFinals={groupFinals}
         results={results}
       />
     </main>

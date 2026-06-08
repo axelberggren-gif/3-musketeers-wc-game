@@ -19,13 +19,18 @@ server pages.
   builds the connector paths. Two lifecycle modes, derived from the `locked` prop:
   - **build** (`!locked`) — editable. Each slot is a `MatchCell` with two stacked
     team-lines: click a line to advance that team. A slot is pickable only when **both**
-    contestants are known (top-down fill); an undecided feeder renders
-    `Winner of ESP–DEN` (`feederLabel()` resolves recursively up `BRACKET_UPSTREAM`,
-    falling back to the slot label pre-draw). The **only** free-choice cell is an R32
-    slot before its real fixture is imported — it falls back to a `DropdownCell`
-    (`<select>` over all teams). Once football-data lands a real R32 pairing
-    (`slotMatches[slot]`), that cell shows the two real teams. The Champion (`W`) is a
-    crown-sticker: tap to crown the Final winner, which sets the real `W` pick (+15).
+    contestants are known (top-down fill); an undecided downstream feeder renders
+    `Winner of Quarter-final 1` (`slotFriendlyName()` names the feeding round, no longer
+    recursive team codes). **R32 entry cells are group-qualification matchups, not a
+    dropdown**: each side is an official WC 2026 qualification slot from `R32_QUALIFIERS`
+    (Winner / Runner-up / 3rd of a group) and shows the placeholder label
+    (`Runner-up Group K`, `3rd Group A/B/C/D/F`) until it resolves to a real team —
+    either from the imported real fixture (`slotMatches[slot]`) or from a completed
+    group's winner/runner-up (`groupFinals` prop, computed by `computeGroupFinals()`
+    server-side). Third-place sides resolve only from the imported fixture (no Annex C
+    reproduction). You tap the winner once both sides are real teams, same as every
+    downstream cell. Team-lines display the 3-letter `code` + flag. The Champion (`W`)
+    is a crown-sticker: tap to crown the Final winner, which sets the real `W` pick (+15).
   - **live** (`locked`) — read-only + scored from the `results` prop
     (`{winnerTeamId, homeScore, awayScore, status}` per slot; `W` ← the Final result).
     A FINISHED slot banks its points (green ✓ Won + scoreline footer + `+pts`) or strikes
@@ -119,6 +124,7 @@ server pages.
 
 ## Recent changes
 <!-- Newest first. Keep last 10. One line per entry. -->
+- 2026-06-08: `BracketBuilder` R32 entry cells switched from a free `<select>` dropdown to **group-qualification matchups**. `DropdownCell` + the `optionsFor()`/`options` free-pick path are gone; `contestantsFor("R32-n")` now reads `R32_QUALIFIERS` (official WC 2026 Matches 73–88, `lib/scoring/bracket-tree.ts`) and resolves each side to a real team via the imported real fixture (`slotMatches`) or a completed group's winner/runner-up (new `groupFinals` prop from `computeGroupFinals()`), else shows the qualification placeholder (`Runner-up Group K`, `3rd Group A/B/C/D/F`). Third-place sides fill only from the imported fixture. The `Contestant` union replaced `pending` with `feeder` (downstream, → `slotFriendlyName()` "Winner of Quarter-final 1") + `qualifier` (R32 placeholder label); `feederLabel()` (recursive team codes) removed. Team-lines now show the 3-letter `code` + flag (was `short_name` full name). `bracket/page.tsx` fetches finished group-stage matches and passes `groupFinals`. **Behaviour change:** R32 sides stay placeholders until those groups finish (resolution is API-driven, per the design ask), so the bracket fills in during the tournament rather than being freely pickable beforehand. The `LEFT`/`RIGHT` linear slot tree (R32-1&2 → R16-1) is unchanged and still groups slots for the funnel; scoring is per-slot and unaffected. Tests added to `bracket-tree.test.ts`. No DB/SQL changes.
 - 2026-06-08: `OutcomesBoard` gained a "House specials" zone — seven admin-resolved props: Neymar 30-min (Yes/No), streaker (Yes/No), clean-sheet-king (goalkeeper pick), top-scoring-nation (team pick), poopy-boot (own-goals number), the war game (group-match pick), Blågult minutes (Swedish-players number). Two new selectors — `BooleanSelect.tsx` (Yes/No) and `MatchSelect.tsx` (server-labelled match dropdown, e.g. "SWE vs DEN · Group A") — both with the standard optimistic-rollback contract. Wired to new `setNeymarMinutesPick` / `setStreakerPick` / `setBestGoalkeeperPick` / `setGoldenBootTeamPick` / `setWarGamePick` / `setOwnGoalsGuess` / `setSwedishPlayersGuess` actions; the completion meter gained a `trackBool` wrapper alongside `trackStr` / `trackNum`. The actual results are entered by an admin in `/admin/props`; scoring (5 pts each, the two numeric ones split ties) runs server-side via `score_manual_props()`. No magic point numbers (copy is text); colours from `globals.css` tokens.
 - 2026-06-08: Removed the group-winners picker. `GroupWinnerPicker.tsx` (12 `TeamSelect`s, one per group, each picking a group winner for 5 pts) is deleted — the pick was redundant with the group-stage 1X2 picks, which already imply each group's winner. `OutcomesBoard` lost its "Group forecast" zone, the `teamsByGroup` / `groupPicks` props, and the `seededGroups` meter keys; `/predict/outcomes/page.tsx` dropped the `group_winner_predictions` fetch + derivations. Scoring is retired in migration `0021_remove_group_winner_prop.sql` and `POINTS.tournament.groupWinner` dropped from `lib/scoring/rules.ts`.
 - 2026-06-08: New `OutcomesBoard.tsx` (the `/predict/outcomes` body) replaces the old `TournamentForm.tsx` (deleted). It lays the tournament-wide props out as a "betting slip" — a `PropCard` sticker per prop (icon · title · points badge · hint · accent shadow · ✓/— footer; champion card uses `.holo`) grouped into themed zones (The big calls · Boots & bookings · The numbers game · Wildcards · Group forecast, the last folding in `GroupWinnerPicker`). A flat `filled` map seeded from server props drives a live completion meter + progress bar; each selector's `onSave` is wrapped so an `ok` save flips the meter bit (rollback still lives in the selectors). Includes the four new over-under props from migration `0020` (goals in the Final, biggest win margin, golden-boot tally, total red cards) wired to the new `setFinalGoalsGuess` / `setBiggestWinMarginGuess` / `setGoldenBootGoalsGuess` / `setTotalRedCardsGuess` actions. `TeamSelect` / `PlayerSelect` / `NumberInput` gained an optional `label` (omit when `PropCard` owns the title — backward compatible); `GroupWinnerPicker` gained an optional `onPicked` reporter. No new magic numbers (point copy is text); all colours from `globals.css` tokens.

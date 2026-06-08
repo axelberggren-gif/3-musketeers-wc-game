@@ -4,7 +4,12 @@ import {
   predictedGroupStandings,
   suggestR32Qualifiers,
   filterSuggestionsByMatchPairs,
+  computeGroupFinals,
+  qualSourceLabel,
+  slotFriendlyName,
+  R32_QUALIFIERS,
   type GroupMatch,
+  type RealGroupMatch,
 } from "./bracket-tree";
 
 describe("upstreamSlots", () => {
@@ -166,5 +171,107 @@ describe("filterSuggestionsByMatchPairs", () => {
       "R32-1": { homeTeamId: "brazil", awayTeamId: "mexico" },
     };
     expect(filterSuggestionsByMatchPairs(suggestions, slotMatches)).toEqual(suggestions);
+  });
+});
+
+describe("R32_QUALIFIERS", () => {
+  it("covers all 16 R32 slots with two sides each", () => {
+    for (let i = 1; i <= 16; i++) {
+      const sides = R32_QUALIFIERS[`R32-${i}`];
+      expect(sides, `R32-${i}`).toBeDefined();
+      expect(sides).toHaveLength(2);
+    }
+  });
+
+  it("matches the official schedule for sampled matches", () => {
+    // M73: Runner-up A vs Runner-up B
+    expect(R32_QUALIFIERS["R32-1"]).toEqual([
+      { kind: "runnerup", group: "A" },
+      { kind: "runnerup", group: "B" },
+    ]);
+    // M74: Winner E vs 3rd of A/B/C/D/F
+    expect(R32_QUALIFIERS["R32-2"]).toEqual([
+      { kind: "winner", group: "E" },
+      { kind: "third", groups: ["A", "B", "C", "D", "F"] },
+    ]);
+    // M76: Winner C vs Runner-up F
+    expect(R32_QUALIFIERS["R32-4"]).toEqual([
+      { kind: "winner", group: "C" },
+      { kind: "runnerup", group: "F" },
+    ]);
+  });
+});
+
+describe("qualSourceLabel", () => {
+  it("labels winners, runners-up and thirds", () => {
+    expect(qualSourceLabel({ kind: "winner", group: "A" })).toBe("Winner Group A");
+    expect(qualSourceLabel({ kind: "runnerup", group: "K" })).toBe("Runner-up Group K");
+    expect(qualSourceLabel({ kind: "third", groups: ["A", "B", "C", "D", "F"] })).toBe(
+      "3rd Group A/B/C/D/F",
+    );
+  });
+});
+
+describe("slotFriendlyName", () => {
+  it("names knockout rounds with a 1-based index", () => {
+    expect(slotFriendlyName("QF-A")).toBe("Quarter-final 1");
+    expect(slotFriendlyName("QF-D")).toBe("Quarter-final 4");
+    expect(slotFriendlyName("SF-B")).toBe("Semi-final 2");
+    expect(slotFriendlyName("R16-3")).toBe("Round of 16 #3");
+    expect(slotFriendlyName("R32-12")).toBe("Round of 32 #12");
+    expect(slotFriendlyName("F")).toBe("Final");
+  });
+});
+
+describe("computeGroupFinals", () => {
+  // A minimal 3-team group (3 matches) so a full round-robin is easy to express.
+  const group = (
+    rows: Array<[string, string, number | null, number | null, string]>,
+  ): RealGroupMatch[] =>
+    rows.map(([h, a, hs, as_, status]) => ({
+      group_letter: "A",
+      home_team_id: h,
+      away_team_id: a,
+      home_score: hs,
+      away_score: as_,
+      status,
+    }));
+
+  it("leaves a group unresolved until every match is FINISHED", () => {
+    const finals = computeGroupFinals(
+      group([
+        ["x", "y", 1, 0, "FINISHED"],
+        ["x", "z", null, null, "SCHEDULED"],
+        ["y", "z", null, null, "SCHEDULED"],
+      ]),
+    );
+    expect(finals.A).toEqual({ winnerTeamId: null, runnerUpTeamId: null, complete: false });
+  });
+
+  it("ranks a completed group by points then goal difference", () => {
+    const finals = computeGroupFinals(
+      group([
+        ["x", "y", 2, 0, "FINISHED"], // x +2
+        ["y", "z", 1, 0, "FINISHED"], // y beats z
+        ["x", "z", 1, 1, "FINISHED"], // x draws z
+      ]),
+    );
+    // x: 3+1=4 pts; y: 3 pts; z: 1 pt → winner x, runner-up y
+    expect(finals.A.complete).toBe(true);
+    expect(finals.A.winnerTeamId).toBe("x");
+    expect(finals.A.runnerUpTeamId).toBe("y");
+  });
+
+  it("breaks a points tie on goal difference", () => {
+    const finals = computeGroupFinals(
+      group([
+        ["x", "y", 3, 0, "FINISHED"], // x big win
+        ["y", "z", 1, 0, "FINISHED"], // y beats z
+        ["z", "x", 1, 0, "FINISHED"], // z beats x
+      ]),
+    );
+    // 3 pts each; GD: x +2, z 0, y -2 → x wins on goal difference
+    expect(finals.A.complete).toBe(true);
+    expect(finals.A.winnerTeamId).toBe("x");
   });
 });
