@@ -123,8 +123,22 @@ Belongs in a follow-up that also pulls a "next match" indicator into the chrome.
 
 ## 7. Bracket progressive reveal (behaviour, not just visual)
 
-**Design**: `project/sticker-c.jsx:StickerBracket` + `project/mobile-c.jsx`. Critical
-behaviour from chat2:
+**Status (2026-06-08)**: shipped as **"The Wall Chart"** redesign (Direction 1 of the
+second design bundle, `project/Wall Chart.html` + `bracket-wallchart.jsx` /
+`bracket-engine.jsx`). `components/predict/BracketBuilder.tsx` is now a symmetric
+tournament poster with measured SVG elbow connectors, top-down progressive reveal
+("Winner of ESP–DEN" pending labels that resolve recursively up the feeder tree), a
+crown-the-champion sticker, and a live-scored read-only mode (✓/✗ marks, real scorelines,
+banked-points HUD `/85`, champion flip on a missed final) driven by `matches.status` /
+`winner` once Round 2 locks. Functional gating + downstream-wipe (`clearBracketPicks`)
+already landed 2026-05-27; this PR replaces the flat grid with the poster and adds the
+live layer. Champion stays a real `W` slot (+15) — crowning sets it, preserving the
+scoring contract. The "Suggest qualifiers" auto-fill was removed per the design chat
+(decide every pick yourself). Fit-to-width on desktop (no horizontal scroll); the chart
+scrolls horizontally on narrow screens.
+
+**Original deferral note (superseded above)** — design from `project/sticker-c.jsx:StickerBracket`
++ `project/mobile-c.jsx`; critical behaviour from chat2:
 - R16 is the only stage with pre-set teams (8 pairings derived from group
   winners/runners-up).
 - QF / SF / Final matchups derive **live** from the previous stage's picks. Where a
