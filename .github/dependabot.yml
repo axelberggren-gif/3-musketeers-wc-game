@@ -1,0 +1,36 @@
+# Dependabot keeps npm dependencies and GitHub Actions patched, and — crucially —
+# bumps the SHA-pinned actions (see .github/workflows/*) so pinning doesn't rot.
+# PR titles use Conventional-Commits prefixes so they pass the pr-title-lint check.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - "area:infra"
+    commit-message:
+      prefix: "chore"
+      include: "scope" # -> "chore(deps): bump ..." / "chore(deps-dev): bump ..."
+    groups:
+      # Collapse low-risk minor/patch bumps into one PR to cut review noise;
+      # majors still open individually.
+      npm-minor-patch:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    labels:
+      - "area:infra"
+    commit-message:
+      prefix: "ci"
+      include: "scope" # -> "ci(deps): bump actions/checkout ..."
+    groups:
+      github-actions:
+        patterns:
+          - "*"

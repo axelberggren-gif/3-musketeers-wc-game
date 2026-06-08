@@ -10,6 +10,33 @@ import type { Pick1X2 } from "@/lib/supabase/types";
 
 const PROP_DEFS = [{ key: "first_goal_final", label: "First goal in the Final" }];
 
+type PredictClient = Awaited<ReturnType<typeof supabaseServer>>;
+type PlayerRow = { id: string; name: string; team: { name: string } | null };
+
+// The players catalogue is ~1,100+ rows for WC 2026 (48 teams × full squads),
+// which exceeds PostgREST's default page size. A single `.limit(1000)` silently
+// truncated the top-scorer / troublemaker pickers alphabetically (~"O"), so we
+// range-paginate through every player instead. Ordering by (name, id) keeps the
+// pagination stable even when two players share a name. Returns the same
+// `{ data, error }` shape as a plain query so the existing Sentry capture and the
+// downstream `playersRes.data` mapping stay unchanged.
+async function fetchAllPlayers(client: PredictClient) {
+  const pageSize = 1000;
+  const all: PlayerRow[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await client
+      .from("players")
+      .select("id, name, team:team_id(name)")
+      .order("name")
+      .order("id")
+      .range(from, from + pageSize - 1);
+    if (error) return { data: null, error };
+    all.push(...((data ?? []) as unknown as PlayerRow[]));
+    if (!data || data.length < pageSize) break;
+  }
+  return { data: all, error: null };
+}
+
 export default async function Round1Page() {
   const supabase = await supabaseServer();
   const {
@@ -53,11 +80,7 @@ export default async function Round1Page() {
     // ranking error is still captured to Sentry so the drift is visible.
     supabase.from("teams").select("id, name, code, group_letter").order("name"),
     supabase.from("teams").select("id, fifa_ranking"),
-    supabase
-      .from("players")
-      .select("id, name, team:team_id(name)")
-      .order("name")
-      .limit(1000),
+    fetchAllPlayers(supabase),
     supabase
       .from("group_winner_predictions")
       .select("group_letter, team_id")

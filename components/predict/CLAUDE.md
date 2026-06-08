@@ -11,28 +11,37 @@ server pages.
 ## Key files
 - `MatchPickCard.tsx` — One match, three big tiles (Home/Draw/Away). Optimistic update
   via `useTransition`, rolls back on server-action failure.
-- `BracketBuilder.tsx` — Grid of slots grouped by stage (R32 → R16 → QF → SF → F → W).
-  Each `SlotCard` picks one of two render modes from the `slotMatches` prop:
-  - **Match-winner mode** when a real match for the slot has both team IDs set
-    (`R32-N`, `R16-N`, `QF-X`, `SF-X`, `F` once football-data lands them):
-    renders `MatchSlotPicker` — two side-by-side Home / Away sticker tiles
-    (gold-on-ink when selected, mirroring `MatchPickCard`'s `PickTile`).
-  - **Dropdown mode** as a fallback (no real match yet, or the `W` champion
-    slot which has no backing match row): renders a `<select>` filtered by
-    progressive reveal — R32 shows all 48 teams; R16/QF/SF/F show only the
-    winners picked in the two upstream slots (via `BRACKET_UPSTREAM` from
-    `lib/scoring/bracket-tree.ts`); W shows only the F pick.
-  Upstream change cascades through `clearBracketPicks()` to wipe downstream
-  picks the new winners no longer cover (same behaviour in both modes). If a
-  slot's stored pick doesn't match either tile team — e.g. an old free-dropdown
-  pick that didn't survive the actual draw — the card surfaces a coral
-  `Re-pick` badge and both tiles unselect, but the pick row stays in the DB
-  until the user picks again. Renders a "Suggest qualifiers" button when
-  `r32Suggestions` is non-empty and any R32 slot is unfilled — calls
-  `setBracketPicksBulk()` to fill empty R32 slots only (never overwrites).
-  The server pre-filters `r32Suggestions` through
-  `filterSuggestionsByMatchPairs()` so the button never bulk-writes a team
-  that isn't one of the real match's two teams.
+- `BracketBuilder.tsx` — **"The Wall Chart"**: a symmetric tournament poster (left draw
+  flows right, right draw flows left, Final + Champion crown the centre) drawn with
+  measured SVG elbow connectors. Cells are tagged `data-slot`; a `measure()` callback
+  (run in an effect on rAF / `ResizeObserver` / `document.fonts.ready`, never during
+  render) reads their boxes via `localBox()` (an offset-chain immune to scroll) and
+  builds the connector paths. Two lifecycle modes, derived from the `locked` prop:
+  - **build** (`!locked`) — editable. Each slot is a `MatchCell` with two stacked
+    team-lines: click a line to advance that team. A slot is pickable only when **both**
+    contestants are known (top-down fill); an undecided feeder renders
+    `Winner of ESP–DEN` (`feederLabel()` resolves recursively up `BRACKET_UPSTREAM`,
+    falling back to the slot label pre-draw). The **only** free-choice cell is an R32
+    slot before its real fixture is imported — it falls back to a `DropdownCell`
+    (`<select>` over all teams). Once football-data lands a real R32 pairing
+    (`slotMatches[slot]`), that cell shows the two real teams. The Champion (`W`) is a
+    crown-sticker: tap to crown the Final winner, which sets the real `W` pick (+15).
+  - **live** (`locked`) — read-only + scored from the `results` prop
+    (`{winnerTeamId, homeScore, awayScore, status}` per slot; `W` ← the Final result).
+    A FINISHED slot banks its points (green ✓ Won + scoreline footer + `+pts`) or strikes
+    your pick (red, grayscale, `+0`); busted downstream picks persist and grey out. The
+    champion sticker flips to "✗ Not your call" on a missed final. A `PointsHUD` shows
+    banked `/85` + per-stage hit rate; connectors turn green (correct) / red-dashed
+    (wrong).
+  Upstream change cascades through `clearBracketPicks()` to wipe now-orphaned downstream
+  picks (optimistic, rollback on failure). Flags use `CountryFlag` (crest → code-box
+  fallback), not emoji. Desktop (`lg+`) fits the `max-w-6xl` page width (no horizontal
+  scroll); below `lg` the chart keeps a generous `72rem` min-width floor
+  (`min-w-[72rem] lg:min-w-0`) so cells stay full-size and the whole poster
+  side-scrolls on phones/tablets — we'd rather scroll a long way than squash teams
+  into illegible slivers. Height is `clamp(720px, 80vh, 800px)` so the 8 stacked R32
+  cells per column keep real spacing on small screens.
+  Point values come from `bracketPointsForSlot()` / `POINTS.bracket` — no magic numbers.
 - `CountdownBanner.tsx` — Live countdown to first kickoff / knockout lock.
 - `PlayerSelect.tsx`, `TeamSelect.tsx` — Generic selectors used in tournament/player
   prop forms. `TeamSelect` supports an optional `showRanking` prop that sorts by
@@ -56,7 +65,7 @@ server pages.
   from `lib/predictions/actions.ts` (and `lib/admin/actions.ts` for admin forms).
 - **Optimistic updates with rollback**: set state immediately, call server action in
   `startTransition`, restore previous state on `!result.ok`. Pattern is in
-  `MatchPickCard.tsx:choose()` and `BracketBuilder.tsx:handleChange()` — copy it for
+  `MatchPickCard.tsx:choose()` and `BracketBuilder.tsx:applyPick()` — copy it for
   new picker components.
 - `locked` is a prop, not derived in the component. The server page computes it via
   `computeLockState()` from `lib/scoring/lock.ts` and passes it in.
@@ -74,10 +83,21 @@ server pages.
 ## Known gotchas
 - `MatchPickCard` shows a "Locked" badge using the same prop that disables tiles —
   don't compute lock state twice.
-- `BracketBuilder` groups slots by `stage` and renders them in a fixed order
-  `R32 → R16 → QF → SF → F → W` regardless of how the parent orders them. The grid
-  uses `lg:grid-cols-6` to fit all six stage columns side-by-side; mobile / `sm`
-  stacks them.
+- `BracketBuilder` lays the slots out as a fixed symmetric poster: `LEFT` half
+  (`R32-1..8 → R16-1..4 → QF-A,B → SF-A`) and a mirrored `RIGHT` half
+  (`SF-B → QF-C,D → R16-5..8 → R32-9..16`) flanking a centre `Final + Champion`
+  column. Columns are equal-height with `justify-content: space-around` so each
+  downstream cell lands centred between its two feeders (the bracket "funnel"); the
+  `LEFT` / `RIGHT` maps are local constants, not derived from the `slots` prop order.
+  Connectors are SVG paths measured from real DOM boxes, so they stay correct as the
+  columns flex to fit the container width.
+- The chart fits `max-w-6xl` on desktop (`lg+`) with **no** horizontal scroll
+  (`lg:min-w-0` releases the floor so `w-full` fills the container); below `lg` an
+  `overflow-x-auto` wrapper + a `min-w-[72rem]` floor make the full-size poster
+  side-scroll on phones/tablets. Height is `clamp(720px, 80vh, 800px)` (was a
+  too-short `clamp(600px, 74vh, 720px)`, which crushed the 8 R32 cells per column on
+  mobile). The `W` champion connector is intentionally not drawn — the sticker sits
+  directly under the Final.
 - Progressive reveal: when a R32 slot's pick changes, the cascade computes which
   downstream picks reference winners that no longer match. Those slots are nulled
   in local state and DELETE'd via `clearBracketPicks()` after the upstream upsert
@@ -87,11 +107,12 @@ server pages.
 ## Recent changes
 <!-- Newest first. Keep last 10. One line per entry. -->
 - 2026-06-08: `MatchPickCard` + `GroupStageList` no longer cause React hydration mismatches once group-stage fixtures are seeded. Both rendered timezone-sensitive output during SSR — `MatchPickCard` via `isoToLocal(kickoff_at)` (`Intl.DateTimeFormat("en-GB", ...)`), and `GroupStageList` via `new Date(kickoff_at).toDateString()` used both as the grouping key and the banner label. Server (Vercel = UTC) and client (user TZ) produced different strings; React tore the DOM. Both now defer the localized swap behind a `requestAnimationFrame`-driven `useState` flag (same pattern as `CountdownBanner`): SSR + first client render emit a stable placeholder (`—` for the kickoff line; `YYYY-MM-DD` ISO date prefix for the banner, also used as the bucket key so the group ordering is identical across runtimes); the effect swaps in the localized value after mount. `suppressHydrationWarning` on the two spans is belt-and-braces. Refs Sentry `JAVASCRIPT-NEXTJS-5`.
-- 2026-06-01: `MatchPickCard` re-tap-to-clear now actually clears the pick in the DB. `choose()` sent `next ?? value` to `setMatchPick`, so toggling a tile off cleared the UI optimistically but re-saved the original pick server-side (the action only upserted) and it reappeared on next load — contradicting the documented "re-tap clears the pick" behaviour. Now passes `next` (which is `null` on re-tap); `setMatchPick` accepts `Pick1X2 | null` and DELETEs the `match_predictions` row on null (mirrors `setGroupWinnerPick`). Rollback-on-failure unchanged. `choose()` sent `next ?? value` to `setMatchPick`, so toggling a tile off cleared the UI optimistically but re-saved the original pick server-side (the action only upserted) and it reappeared on next load — contradicting the documented "re-tap clears the pick" behaviour. Now passes `next` (which is `null` on re-tap); `setMatchPick` accepts `Pick1X2 | null` and DELETEs the `match_predictions` row on null (mirrors `setGroupWinnerPick`). Rollback-on-failure unchanged.
+- 2026-06-08: `BracketBuilder` mobile fit-up. The Wall Chart's shared `minWidth: 54rem` crammed all 9 columns into ~82px cells on phones (vs ~108px on desktop) and the `clamp(600px, 74vh, 720px)` height collapsed to ~600px there, leaving the 8 stacked R32 cells per column almost no gap. Replaced the inline `minWidth` with a responsive class floor — `min-w-[72rem] lg:min-w-0` (full-size, side-scrolling poster below `lg`; releases the floor so `w-full` fits `max-w-6xl` with no scroll on desktop) — bumped the height to `clamp(720px, 80vh, 800px)`, widened the inter-column gap to `gap-3 sm:gap-4`, and let the scroll wrapper bleed to the screen edge on mobile (`-mx-4 px-4 sm:-mx-1 sm:px-1`). Side-scroll a long way beats illegible slivers. No behaviour/scoring change.
+- 2026-06-08: `BracketBuilder` rebuilt as **"The Wall Chart"** (second design bundle, Direction 1). Replaced the flat `lg:grid-cols-6` grid of `SlotCard`/`MatchSlotPicker`/`DropdownSlotBody` with a symmetric poster (`LEFT`/`RIGHT` halves → centre Final + Champion) drawn with measured SVG elbow connectors (cells tagged `data-slot`; `localBox()` offset-chain + `measure()` in an effect on rAF/`ResizeObserver`/`fonts.ready`). New `MatchCell` shows two clickable team-lines (pickable only when both contestants known — top-down fill) with recursive `Winner of ESP–DEN` pending labels (`feederLabel()` over `BRACKET_UPSTREAM`); R32 pre-draw keeps a compact `DropdownCell`; `W` is a crown-the-Final-winner sticker (still the real +15 slot). New lifecycle modes from `locked`: **build** (editable) and **live** (read-only, scored from a new `results` prop — ✓/✗ marks, scorelines, `PointsHUD` banked `/85`, champion flip, green/red connectors). Page extends the knockout query with `status,winner,home_score,away_score` and maps `W` ← Final. Removed the "Suggest qualifiers" auto-fill (`r32Suggestions` prop, `setBracketPicksBulk` usage) per the design chat — `bracket-tree.ts` helpers + the action remain (now unused). Points come from `bracketPointsForSlot()`; tokens reuse `globals.css` vars. Fit-to-width desktop (no horizontal scroll), full-size side-scrolling poster on mobile (min-width floor — see the newer mobile-fit entry above for the current values).
+- 2026-06-01: `MatchPickCard` re-tap-to-clear now actually clears the pick in the DB. `choose()` sent `next ?? value` to `setMatchPick`, so toggling a tile off cleared the UI optimistically but re-saved the original pick server-side (the action only upserted) and it reappeared on next load — contradicting the documented "re-tap clears the pick" behaviour. Now passes `next` (which is `null` on re-tap); `setMatchPick` accepts `Pick1X2 | null` and DELETEs the `match_predictions` row on null (mirrors `setGroupWinnerPick`). Rollback-on-failure unchanged.
 - 2026-05-27: `BracketBuilder` reads real knockout match pairings from a new `slotMatches: Record<bracket_slot, { homeTeamId, awayTeamId }>` prop. When a slot has a real match with both team IDs set, `SlotCard` switches from the dropdown to a new `MatchSlotPicker` — two side-by-side Home / Away tile buttons (sticker-styled like `MatchPickCard`'s `PickTile`, gold-on-ink for the selected team). Slots without a match — and `W`, which has no underlying match row — keep the dropdown. Stale picks (the stored team isn't either tile team, e.g. an old free-dropdown choice that didn't survive the real draw) surface as a coral `Re-pick` badge with both tiles unselected — the DB row stays until the user picks one of the two real teams. Server-side, `r32Suggestions` is pre-filtered through `filterSuggestionsByMatchPairs()` (`lib/scoring/bracket-tree.ts`) so the "Suggest qualifiers" button never bulk-writes a team that isn't one of the match's two teams. Pre-knockout-import the UI is identical to before — `slotMatches` is empty so every slot falls back to dropdown mode.
 - 2026-05-27: `BracketBuilder` filters `r32Suggestions` through the actual `slots` prop before counting / applying — defense in depth after the helper started returning at most 16 picks. `validSuggestions` is the only thing the button reads, so a future helper bug that emits an out-of-range slot can never write an orphan row. Suggestion explainer copy updated to "16 likely R32 winners (top advancers by predicted points)" — was misleadingly "32 qualifiers".
 - 2026-05-27: `BracketBuilder` extended for WC 2026's Round of 32. Stage union gains `R32`; `STAGE_ORDER` is now `R32 → R16 → QF → SF → F → W`. Grid bumped to `lg:grid-cols-6`. Each slot now filters its `<select>` options through `BRACKET_UPSTREAM` (from `lib/scoring/bracket-tree.ts`): R32 shows all 48 teams; downstream stages restrict to winners picked upstream. Picks are owned in component state (was: per-slot state); changing an upstream slot computes the set of invalidated downstream picks and clears them via `clearBracketPicks()` after the primary `setBracketPick()` succeeds. New "Suggest qualifiers" pitch-green pill above the grid: when the server passes `r32Suggestions` (top-2 per group + best-8 third-place, computed from the user's group-stage 1X2 picks), one click bulk-upserts via `setBracketPicksBulk()` into empty R32 slots only. Server action `clearBracketPicks(slots[])` and `setBracketPicksBulk(picks[])` added to `lib/predictions/actions.ts` — both gated on `locks.round2Locked`.
 - 2026-05-25: `GroupStageList.tsx` extracted from `app/(app)/predict/page.tsx`. The static group chip strip became an interactive filter: an "All groups" reset pill plus one pill per group letter; clicking toggles the active filter (re-tap clears, switch to a different group switches). Active pill uses `bg-gold`; complete groups still flip to `bg-pitch` ✓ when inactive. Date-grouping moved into the client component so it re-groups the filtered subset. Server page now passes `picksByMatch` / `groupCoverage` as plain `Record<>` objects (was `Map`) for RSC serialisation.
 - 2026-05-25: `CountdownBanner` no longer triggers React hydration mismatches. The lazy `useState` initializer used to call `Date.now()` during SSR, but SSR and hydration run a few hundred ms apart so the formatted string differed and React tore the DOM. `remaining` now starts as `null` (placeholder DOM `--:--:--` on both server and client first render); a `requestAnimationFrame` inside `useEffect` schedules the first real tick, then a 1 s interval drives the countdown. Refs Sentry `JAVASCRIPT-NEXTJS-5` / #47.
 - 2026-05-22: Sticker Stadium re-skin. `MatchPickCard` rebuilt with sticker tiles (paper-2 bg, ink shadow, gold selection state) and a "✓ Picked / Pick! / Locked" status pill. Tile tap now toggles (re-tap clears the pick). `BracketBuilder` slots use a dashed-border "?" empty state, gold shadow on the Champion slot when filled, sticker stage headers. `CountdownBanner` rebuilt as a coral-shadow sticker pill with mono `LOCKS IN` label + Archivo Black coral countdown. `TeamSelect` / `PlayerSelect` / `NumberInput` / `GroupWinnerPicker` / `TournamentForm` inherit the new `.input` + `.label` chrome with no behaviour changes. Bracket progressive-reveal (R16 pre-set, QF/SF/F derive from upstream, downstream invalidation) is **not** implemented — tracked in `/DESIGN_MISALIGNMENTS.md` §7.
-- 2026-05-22: Added `NumberInput.tsx` and `GroupWinnerPicker.tsx` for the new tournament-wide props (total goals, highest match, group winners). `TeamSelect` gained `showRanking` for rank-based dark-horse display. `TournamentForm` extended with first-eliminated, total-goals, highest-match, troublemaker fields plus the rank-aware dark-horse label.
