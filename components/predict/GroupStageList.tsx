@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MatchPickCard, type MatchPickRow } from "./MatchPickCard";
 import type { Pick1X2 } from "@/lib/supabase/types";
 
@@ -44,6 +44,18 @@ export function GroupStageList({
   locked,
 }: Props) {
   const [activeGroup, setActiveGroup] = useState<string | null>(null);
+  // Localized date headers must match on SSR (UTC) and client (user TZ), so we
+  // only swap the formatted label in after mount to avoid a hydration mismatch
+  // (Sentry JAVASCRIPT-NEXTJS-5). The grouping key uses the kickoff ISO's date
+  // prefix — stable across runtimes — so reordering between SSR and hydration
+  // never happens.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    // Defer the flip to a separate frame so initial hydration emits the same
+    // placeholder as SSR — same pattern as CountdownBanner.
+    const raf = requestAnimationFrame(() => setMounted(true));
+    return () => cancelAnimationFrame(raf);
+  }, []);
 
   const visibleMatches = useMemo(
     () =>
@@ -54,9 +66,12 @@ export function GroupStageList({
   );
 
   // Re-group filtered matches by date for the existing date-banner layout.
+  // Key is the ISO date prefix (`YYYY-MM-DD`) so SSR and hydration agree on
+  // both the group ordering and which matches fall into which bucket. The
+  // human-readable label is derived separately and only after mount.
   const groupedByDate = useMemo(() => {
     return visibleMatches.reduce<Record<string, GroupStageMatch[]>>((acc, m) => {
-      const date = new Date(m.kickoff_at).toDateString();
+      const date = m.kickoff_at.slice(0, 10);
       (acc[date] ??= []).push(m);
       return acc;
     }, {});
@@ -124,8 +139,11 @@ export function GroupStageList({
       )}
       {Object.entries(groupedByDate).map(([date, group]) => (
         <div key={date} className="flex flex-col gap-3">
-          <h3 className="font-mono-sticker text-[11px] uppercase tracking-widest text-ink-soft font-medium">
-            {date}
+          <h3
+            className="font-mono-sticker text-[11px] uppercase tracking-widest text-ink-soft font-medium"
+            suppressHydrationWarning
+          >
+            {mounted ? new Date(group[0].kickoff_at).toDateString() : date}
           </h3>
           <div className="grid md:grid-cols-2 gap-3">
             {group.map((m) => (
