@@ -1,13 +1,18 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
 import {
-  clearBracketPicks,
-  setBracketPick,
-  setBracketPicksBulk,
-} from "@/lib/predictions/actions";
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
+import { clearBracketPicks, setBracketPick } from "@/lib/predictions/actions";
 import { CountryFlag } from "@/components/CountryFlag";
 import { BRACKET_UPSTREAM, upstreamSlots } from "@/lib/scoring/bracket-tree";
+import { POINTS, bracketPointsForSlot } from "@/lib/scoring/rules";
 
 export interface BracketTeam {
   id: string;
@@ -30,23 +35,64 @@ export interface BracketMatchPair {
   awayTeamId: string;
 }
 
+/**
+ * The real result of the knockout match backing a slot (once it's FINISHED).
+ * For the `W` (champion) slot the page maps in the Final's result, since the
+ * champion is scored off the Final match. `winnerTeamId` is the real winner;
+ * `status` mirrors `matches.status`.
+ */
+export interface SlotResult {
+  winnerTeamId: string | null;
+  homeScore: number | null;
+  awayScore: number | null;
+  status: string;
+}
+
 interface Props {
   slots: BracketSlot[];
   teams: BracketTeam[];
   initial: Record<string, string | null>;
+  /** Round-2 lock. When true the bracket flips to the read-only, live-scored mode. */
   locked: boolean;
-  r32Suggestions: { slot: string; teamId: string }[];
   /**
-   * Real knockout match pairings keyed by `bracket_slot` (e.g. `R32-1`, `R16-3`,
-   * `QF-A`, `SF-B`, `F`). When a slot has an entry with both team IDs present,
-   * `SlotCard` renders a "Home vs Away → pick winner" tile UI instead of the
-   * free dropdown. Slots without an entry — and the `W` (champion) slot, which
-   * has no underlying match — fall back to the upstream-filtered dropdown.
+   * Real knockout match pairings keyed by `bracket_slot` (e.g. `R32-1`, `F`).
+   * Used for the R32 entry cells: once football-data lands a real R32 fixture the
+   * cell shows the two real teams to pick a winner from; before the draw the R32
+   * cell falls back to a free dropdown over all teams. Downstream cells never use
+   * this — their contestants are always the user's own upstream picks.
    */
   slotMatches: Record<string, BracketMatchPair>;
+  /** Real results per slot, used to score the bracket in live mode. */
+  results: Record<string, SlotResult>;
 }
 
 const STAGE_ORDER: BracketStage[] = ["R32", "R16", "QF", "SF", "F", "W"];
+
+// Symmetric wall-chart halves: the left draw flows rightward into the Final,
+// the right draw flows leftward. Mirrors lib/scoring/bracket-tree's slot graph.
+const LEFT = {
+  R32: ["R32-1", "R32-2", "R32-3", "R32-4", "R32-5", "R32-6", "R32-7", "R32-8"],
+  R16: ["R16-1", "R16-2", "R16-3", "R16-4"],
+  QF: ["QF-A", "QF-B"],
+  SF: ["SF-A"],
+} as const;
+const RIGHT = {
+  SF: ["SF-B"],
+  QF: ["QF-C", "QF-D"],
+  R16: ["R16-5", "R16-6", "R16-7", "R16-8"],
+  R32: ["R32-9", "R32-10", "R32-11", "R32-12", "R32-13", "R32-14", "R32-15", "R32-16"],
+} as const;
+
+const STAGE_PTS: Record<BracketStage, number> = {
+  R32: POINTS.bracket.R32,
+  R16: POINTS.bracket.R16,
+  QF: POINTS.bracket.QF,
+  SF: POINTS.bracket.SF,
+  F: POINTS.bracket.F,
+  W: POINTS.bracket.WINNER,
+};
+const STAGE_COUNT: Record<BracketStage, number> = { R32: 16, R16: 8, QF: 4, SF: 2, F: 1, W: 1 };
+const MAX_POSSIBLE = STAGE_ORDER.reduce((sum, s) => sum + STAGE_PTS[s] * STAGE_COUNT[s], 0); // 85
 
 const DOWNSTREAM_OF: Record<string, string[]> = buildDownstreamMap();
 
@@ -71,383 +117,845 @@ function collectDownstream(slot: string): string[] {
   return out;
 }
 
-export function BracketBuilder({
-  slots,
-  teams,
-  initial,
-  locked,
-  r32Suggestions,
-  slotMatches,
-}: Props) {
+function stageOf(slot: string): BracketStage {
+  return slot === "W" ? "W" : (slot.split("-")[0] as BracketStage);
+}
+
+// ── Connector geometry (transform-independent, measured from real DOM) ──────
+// Offset-chain box relative to `root` — unaffected by parent scroll/zoom.
+function localBox(el: HTMLElement, root: HTMLElement) {
+  let x = 0;
+  let y = 0;
+  let n: HTMLElement | null = el;
+  while (n && n !== root) {
+    x += n.offsetLeft;
+    y += n.offsetTop;
+    n = n.offsetParent as HTMLElement | null;
+  }
+  return { x, y, w: el.offsetWidth, h: el.offsetHeight };
+}
+
+function elbow(ax: number, ay: number, bx: number, by: number) {
+  const mx = (ax + bx) / 2;
+  return `M ${ax} ${ay} H ${mx} V ${by} H ${bx}`;
+}
+
+const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
+
+// ── Contestant + feeder-label resolution ────────────────────────────────────
+type Contestant =
+  | { kind: "team"; teamId: string }
+  | { kind: "pending"; from: string };
+
+interface ResolveCtx {
+  picks: Record<string, string | null>;
+  slotMatches: Record<string, BracketMatchPair>;
+  teamById: Record<string, BracketTeam>;
+  slotLabelById: Record<string, string>;
+}
+
+// The two (or one, for W) contestants of a slot. R32 reads the real fixture
+// when imported (else empty → caller renders the free dropdown). Every other
+// slot derives its contestants from the user's own upstream picks.
+function contestantsFor(slot: string, ctx: ResolveCtx): Contestant[] {
+  const stage = stageOf(slot);
+  if (stage === "R32") {
+    const m = ctx.slotMatches[slot];
+    return m
+      ? [
+          { kind: "team", teamId: m.homeTeamId },
+          { kind: "team", teamId: m.awayTeamId },
+        ]
+      : [];
+  }
+  if (slot === "W") {
+    const f = ctx.picks["F"];
+    return [f ? { kind: "team", teamId: f } : { kind: "pending", from: "F" }];
+  }
+  return upstreamSlots(slot).map((up): Contestant =>
+    ctx.picks[up] ? { kind: "team", teamId: ctx.picks[up]! } : { kind: "pending", from: up },
+  );
+}
+
+function teamCode(teamById: Record<string, BracketTeam>, id: string): string {
+  const t = teamById[id];
+  return t?.code ?? t?.short_name ?? t?.name?.slice(0, 3).toUpperCase() ?? "?";
+}
+
+// "ESP–DEN" for a slot's two feeders, resolving recursively up the tree to real
+// country codes. Bottoms out at an R32 fixture (or its slot label pre-draw).
+function feederLabel(slot: string, ctx: ResolveCtx, joiner = "–"): string {
+  const cs = contestantsFor(slot, ctx);
+  if (cs.length === 0) return ctx.slotLabelById[slot] ?? slot;
+  return cs
+    .map((c) => (c.kind === "team" ? teamCode(ctx.teamById, c.teamId) : feederLabel(c.from, ctx, "/")))
+    .join(joiner);
+}
+
+// Banked points + per-stage hit rate for a locked bracket vs reality.
+function bracketScore(
+  picks: Record<string, string | null>,
+  results: Record<string, SlotResult>,
+  slotsByStage: Record<BracketStage, string[]>,
+) {
+  let banked = 0;
+  const perStage: Record<string, { correct: number; total: number; revealed: boolean; perfect: boolean }> = {};
+  for (const stage of STAGE_ORDER) {
+    const slots = slotsByStage[stage] ?? [];
+    let correct = 0;
+    let finished = 0;
+    for (const slot of slots) {
+      const r = results[slot];
+      if (r && r.status === "FINISHED") {
+        finished += 1;
+        if (picks[slot] && picks[slot] === r.winnerTeamId) {
+          correct += 1;
+          banked += bracketPointsForSlot(slot);
+        }
+      }
+    }
+    perStage[stage] = {
+      correct,
+      total: slots.length,
+      revealed: finished > 0,
+      perfect: finished === slots.length && correct === slots.length,
+    };
+  }
+  return { banked, perStage, maxPossible: MAX_POSSIBLE };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+export function BracketBuilder({ slots, teams, initial, locked, slotMatches, results }: Props) {
   const [picks, setPicks] = useState<Record<string, string | null>>(initial);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+
+  const mode: "build" | "live" = locked ? "live" : "build";
+
   const teamById = useMemo(
-    () => Object.fromEntries(teams.map((t) => [t.id, t])),
+    () => Object.fromEntries(teams.map((t) => [t.id, t])) as Record<string, BracketTeam>,
     [teams],
   );
-
-  const grouped = slots.reduce<Record<string, BracketSlot[]>>((acc, s) => {
-    (acc[s.stage] ??= []).push(s);
+  const slotLabelById = useMemo(
+    () => Object.fromEntries(slots.map((s) => [s.slot, s.label])),
+    [slots],
+  );
+  const slotsByStage = useMemo(() => {
+    const acc = {} as Record<BracketStage, string[]>;
+    for (const s of slots) (acc[s.stage] ??= []).push(s.slot);
     return acc;
-  }, {});
+  }, [slots]);
 
-  const slotIds = useMemo(() => new Set(slots.map((s) => s.slot)), [slots]);
-  const validSuggestions = useMemo(
-    () => r32Suggestions.filter((q) => slotIds.has(q.slot)),
-    [r32Suggestions, slotIds],
+  const ctx: ResolveCtx = useMemo(
+    () => ({ picks, slotMatches, teamById, slotLabelById }),
+    [picks, slotMatches, teamById, slotLabelById],
   );
 
-  function optionsFor(slot: BracketSlot): BracketTeam[] {
-    const ups = upstreamSlots(slot.slot);
-    if (ups.length === 0) return teams;
-    const pool = ups
-      .map((u) => picks[u])
-      .filter((id): id is string => !!id)
-      .map((id) => teamById[id])
-      .filter((t): t is BracketTeam => !!t);
-    return pool;
-  }
+  const optionsFor = useCallback(
+    (slot: string): BracketTeam[] => {
+      const ups = upstreamSlots(slot);
+      if (ups.length === 0) return teams; // R32 free dropdown (pre-draw)
+      return ups
+        .map((u) => picks[u])
+        .filter((id): id is string => !!id)
+        .map((id) => teamById[id])
+        .filter((t): t is BracketTeam => !!t);
+    },
+    [teams, picks, teamById],
+  );
 
-  function applyPick(slot: string, teamId: string) {
-    const previous = { ...picks };
-    const invalidatedDownstream = collectDownstream(slot).filter((ds) => {
-      const ups = upstreamSlots(ds);
-      const newWinners = new Set(
-        ups.map((u) => (u === slot ? teamId : picks[u])).filter(Boolean),
-      );
-      return picks[ds] && !newWinners.has(picks[ds]!);
+  const applyPick = useCallback(
+    (slot: string, teamId: string) => {
+      if (locked) return;
+      const previous = { ...picks };
+      const invalidatedDownstream = collectDownstream(slot).filter((ds) => {
+        const ups = upstreamSlots(ds);
+        const newWinners = new Set(ups.map((u) => (u === slot ? teamId : picks[u])).filter(Boolean));
+        return picks[ds] && !newWinners.has(picks[ds]!);
+      });
+
+      const next = { ...picks, [slot]: teamId };
+      for (const ds of invalidatedDownstream) next[ds] = null;
+      setPicks(next);
+      setError(null);
+
+      startTransition(async () => {
+        const result = await setBracketPick(slot, teamId);
+        if (!result.ok) {
+          setPicks(previous);
+          setError(result.error);
+          return;
+        }
+        if (invalidatedDownstream.length > 0) {
+          const clearRes = await clearBracketPicks(invalidatedDownstream);
+          if (!clearRes.ok) setError(clearRes.error);
+        }
+      });
+    },
+    [locked, picks],
+  );
+
+  // ── Connector measurement ──────────────────────────────────────────────
+  // Cells are tagged with `data-slot`; `measure` (run in an effect, never during
+  // render) reads their boxes from the DOM, so no per-cell ref map is needed.
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const [geo, setGeo] = useState<{ down: string; up: string; d: string }[]>([]);
+
+  const measure = useCallback(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const boxes: Record<string, ReturnType<typeof localBox>> = {};
+    root.querySelectorAll<HTMLElement>("[data-slot]").forEach((el) => {
+      const slot = el.dataset.slot;
+      if (slot) boxes[slot] = localBox(el, root);
     });
-
-    const next = { ...picks, [slot]: teamId };
-    for (const ds of invalidatedDownstream) next[ds] = null;
-    setPicks(next);
-    setError(null);
-
-    startTransition(async () => {
-      const result = await setBracketPick(slot, teamId);
-      if (!result.ok) {
-        setPicks(previous);
-        setError(result.error);
-        return;
+    const box = (slot: string) => boxes[slot] ?? null;
+    const conns: { down: string; up: string; d: string }[] = [];
+    for (const [down, ups] of Object.entries(BRACKET_UPSTREAM)) {
+      if (down === "W") continue; // champion sits below the Final; no drawn connector
+      const db = box(down);
+      if (!db) continue;
+      for (const up of ups) {
+        const ub = box(up);
+        if (!ub) continue;
+        const fromLeft = ub.x + ub.w / 2 < db.x + db.w / 2;
+        const ax = fromLeft ? ub.x + ub.w : ub.x;
+        const ay = ub.y + ub.h / 2;
+        const bx = fromLeft ? db.x : db.x + db.w;
+        const by = db.y + db.h / 2;
+        conns.push({ down, up, d: elbow(ax, ay, bx, by) });
       }
-      if (invalidatedDownstream.length > 0) {
-        const clearRes = await clearBracketPicks(invalidatedDownstream);
-        if (!clearRes.ok) setError(clearRes.error);
-      }
-    });
-  }
+    }
+    setGeo(conns);
+  }, []);
 
-  function applySuggestions() {
-    const filtered = validSuggestions.filter((q) => !picks[q.slot]);
-    if (filtered.length === 0) return;
-    const previous = { ...picks };
-    const next = { ...picks };
-    for (const q of filtered) next[q.slot] = q.teamId;
-    setPicks(next);
-    setError(null);
-    startTransition(async () => {
-      const result = await setBracketPicksBulk(filtered);
-      if (!result.ok) {
-        setPicks(previous);
-        setError(result.error);
-      }
-    });
-  }
+  useIsomorphicLayoutEffect(() => {
+    const raf = requestAnimationFrame(() => requestAnimationFrame(measure));
+    let ro: ResizeObserver | undefined;
+    if (typeof ResizeObserver !== "undefined" && rootRef.current) {
+      ro = new ResizeObserver(measure);
+      ro.observe(rootRef.current);
+    }
+    if (typeof document !== "undefined" && document.fonts?.ready) {
+      document.fonts.ready.then(measure).catch(() => {});
+    }
+    return () => {
+      cancelAnimationFrame(raf);
+      ro?.disconnect();
+    };
+    // re-measure when picks change (cells grow/shrink as teams resolve) or on mode flip.
+  }, [measure, picks, mode]);
 
-  const suggestableCount = validSuggestions.filter((q) => !picks[q.slot]).length;
+  const score = mode === "live" ? bracketScore(picks, results, slotsByStage) : null;
+
+  const renderColumn = (columnSlots: readonly string[]) => (
+    <div className="flex flex-col justify-around h-full min-w-0" style={{ flex: "1 1 0" }}>
+      {columnSlots.map((slot) => (
+        <div key={slot} data-slot={slot}>
+          <MatchCell
+            slot={slot}
+            ctx={ctx}
+            mode={mode}
+            locked={locked}
+            pending={pending}
+            result={results[slot]}
+            options={optionsFor(slot)}
+            onPick={applyPick}
+          />
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <div className="flex flex-col gap-4">
-      {validSuggestions.length > 0 && !locked && (
-        <div
-          className="flex flex-wrap items-center justify-between gap-3 bg-paper-2 border-2 border-ink rounded-xl px-4 py-3"
-          style={{ boxShadow: "3px 3px 0 var(--ink)" }}
-        >
-          <p className="text-xs text-ink-soft max-w-md">
-            Based on your group-stage picks, suggest 16 likely R32 winners (top advancers across
-            all groups by predicted points). Fill empty R32 slots only — won&rsquo;t overwrite
-            picks.
-          </p>
-          <button
-            type="button"
-            onClick={applySuggestions}
-            disabled={pending || suggestableCount === 0}
-            className="badge badge-pitch font-display uppercase text-xs px-3 py-1.5 disabled:opacity-50"
-            style={{ boxShadow: "3px 3px 0 var(--ink)" }}
-          >
-            {suggestableCount === 0
-              ? "All R32 slots filled"
-              : `Suggest ${suggestableCount} qualifier${suggestableCount === 1 ? "" : "s"}`}
-          </button>
-        </div>
-      )}
       {error && (
         <p className="text-xs text-red font-medium border-2 border-red rounded-xl px-3 py-2 bg-paper-2">
           {error}
         </p>
       )}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-6">
-        {STAGE_ORDER.map((stage) =>
-          grouped[stage] ? (
-            <div key={stage} className="flex flex-col gap-3">
-              <h3
-                className="font-display uppercase text-xs tracking-widest text-ink bg-paper-2 border-2 border-ink rounded-full px-3 py-1 self-start"
-                style={{ boxShadow: "3px 3px 0 var(--ink)" }}
-              >
-                {stageLabel(stage)}
-              </h3>
-              {grouped[stage].map((s) => {
-                const match = slotMatches[s.slot] ?? null;
-                const home = match ? teamById[match.homeTeamId] : undefined;
-                const away = match ? teamById[match.awayTeamId] : undefined;
-                const matchReady = !!(match && home && away);
-                return (
-                  <SlotCard
-                    key={s.slot}
-                    slot={s}
-                    options={optionsFor(s)}
-                    value={picks[s.slot] ?? null}
-                    selectedTeam={picks[s.slot] ? teamById[picks[s.slot]!] : undefined}
-                    pending={pending}
-                    locked={locked}
-                    matchPair={matchReady ? { home: home!, away: away! } : null}
-                    onPick={(teamId) => applyPick(s.slot, teamId)}
-                  />
-                );
-              })}
-            </div>
-          ) : null,
-        )}
+
+      {/* top bar: build legend / live scoreboard */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <StatusPill mode={mode} results={results} slotsByStage={slotsByStage} />
+        {mode === "build" ? <StageLegend /> : score && <PointsHUD score={score} />}
       </div>
+
+      {/* the wall chart — fills the container on desktop (no horizontal scroll);
+          scrolls horizontally on narrower screens via the min-width floor. */}
+      <div className="overflow-x-auto -mx-1 px-1">
+        <div
+          ref={rootRef}
+          className="relative w-full"
+          style={{ minWidth: "54rem", height: "clamp(600px, 74vh, 720px)" }}
+        >
+          {/* connectors (under the cells) */}
+          <svg
+            className="absolute inset-0 w-full h-full pointer-events-none"
+            style={{ zIndex: 0 }}
+            aria-hidden
+          >
+            {geo.map((c, i) => {
+              const decided = !!picks[c.up];
+              let stroke = decided ? "var(--pitch)" : "var(--ink-soft)";
+              let dash: string | undefined = decided ? undefined : "4 5";
+              let op = decided ? 1 : 0.5;
+              if (mode === "live") {
+                const r = results[c.up];
+                if (r && r.status === "FINISHED") {
+                  const ok = !!picks[c.up] && picks[c.up] === r.winnerTeamId;
+                  stroke = ok ? "var(--pitch)" : "var(--red)";
+                  dash = ok ? undefined : "5 5";
+                  op = 1;
+                }
+              }
+              return (
+                <path
+                  key={`${c.up}-${c.down}-${i}`}
+                  d={c.d}
+                  fill="none"
+                  stroke={stroke}
+                  strokeWidth={dash ? 2 : 3}
+                  strokeDasharray={dash}
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                  opacity={op}
+                />
+              );
+            })}
+          </svg>
+
+          {/* columns (above the svg) */}
+          <div className="relative h-full flex items-stretch gap-2 sm:gap-3" style={{ zIndex: 1 }}>
+            {renderColumn(LEFT.R32)}
+            {renderColumn(LEFT.R16)}
+            {renderColumn(LEFT.QF)}
+            {renderColumn(LEFT.SF)}
+
+            {/* centre: Final + Champion */}
+            <div
+              className="flex flex-col items-center justify-center gap-3 h-full min-w-0"
+              style={{ flex: "1.5 1 0" }}
+            >
+              <div className="w-full flex flex-col items-center">
+                <div className="font-mono-sticker text-[10px] font-bold tracking-[0.15em] text-ink-soft mb-1.5">
+                  THE FINAL · +{STAGE_PTS.F}
+                </div>
+                <div data-slot="F" className="w-full max-w-[200px]">
+                  <MatchCell
+                    slot="F"
+                    ctx={ctx}
+                    mode={mode}
+                    locked={locked}
+                    pending={pending}
+                    result={results["F"]}
+                    options={optionsFor("F")}
+                    onPick={applyPick}
+                    accentShadow="var(--gold)"
+                  />
+                </div>
+              </div>
+              <ChampionSticker
+                wPick={picks["W"] ?? null}
+                fPick={picks["F"] ?? null}
+                teamById={teamById}
+                mode={mode}
+                result={results["W"]}
+                locked={locked}
+                pending={pending}
+                onCrown={() => picks["F"] && applyPick("W", picks["F"]!)}
+              />
+            </div>
+
+            {renderColumn(RIGHT.SF)}
+            {renderColumn(RIGHT.QF)}
+            {renderColumn(RIGHT.R16)}
+            {renderColumn(RIGHT.R32)}
+          </div>
+        </div>
+      </div>
+
+      <p className="font-mono-sticker text-[11px] text-ink-soft">
+        {mode === "build"
+          ? "Fill the bracket top-down — your R32 winners flow into the next round. Dashed slots read “Winner of …” until you decide. Autosaves; locks at the deadline."
+          : "Bracket locked. Each match banks its points or strikes your pick as results land — your downstream picks persist, they just stop scoring."}
+      </p>
     </div>
   );
 }
 
-function stageLabel(s: BracketStage) {
-  switch (s) {
-    case "R32":
-      return "Round of 32";
-    case "R16":
-      return "Round of 16";
-    case "QF":
-      return "Quarter-finals";
-    case "SF":
-      return "Semi-finals";
-    case "F":
-      return "Final";
-    case "W":
-      return "Champion";
-  }
-}
-
-function SlotCard({
+// ── A single match cell: two stacked team-lines (+ scored footer in live mode),
+//    or a free dropdown for an R32 slot before the draw is imported. ──────────
+function MatchCell({
   slot,
-  options,
-  value,
-  selectedTeam,
-  pending,
+  ctx,
+  mode,
   locked,
-  matchPair,
+  pending,
+  result,
+  options,
   onPick,
+  accentShadow,
 }: {
-  slot: BracketSlot;
-  options: BracketTeam[];
-  value: string | null;
-  selectedTeam: BracketTeam | undefined;
-  pending: boolean;
+  slot: string;
+  ctx: ResolveCtx;
+  mode: "build" | "live";
   locked: boolean;
-  matchPair: { home: BracketTeam; away: BracketTeam } | null;
-  onPick: (teamId: string) => void;
+  pending: boolean;
+  result: SlotResult | undefined;
+  options: BracketTeam[];
+  onPick: (slot: string, teamId: string) => void;
+  accentShadow?: string;
 }) {
-  const isChampion = slot.stage === "W";
-  const upstreamEmpty = options.length === 0 && slot.stage !== "R32";
-  const staleMatchPick =
-    !!matchPair &&
-    !!value &&
-    value !== matchPair.home.id &&
-    value !== matchPair.away.id;
+  const stage = stageOf(slot);
+  const cont = contestantsFor(slot, ctx);
+  const winner = ctx.picks[slot] ?? null;
+
+  // R32 before its real fixture lands → free dropdown (the only free-choice cell).
+  if (stage === "R32" && cont.length === 0) {
+    return (
+      <DropdownCell
+        slot={slot}
+        ctx={ctx}
+        options={options}
+        locked={locked}
+        pending={pending}
+        onPick={onPick}
+      />
+    );
+  }
+
+  const knownTeamIds = cont.flatMap((c) => (c.kind === "team" ? [c.teamId] : []));
+  const bothKnown = cont.length >= 2 && cont.every((c) => c.kind === "team");
+  const stalePick = !!winner && knownTeamIds.length > 0 && !knownTeamIds.includes(winner);
+
+  const scored = mode === "live" && !!result && result.status === "FINISHED";
+  const realWinner = scored ? result!.winnerTeamId : null;
+  const correct = scored && !!winner && winner === realWinner;
+  const pts = bracketPointsForSlot(slot);
+  const clickable = mode === "build" && !locked && bothKnown && !pending;
+
+  const edge = scored ? (correct ? "var(--pitch)" : "var(--red)") : winner ? "var(--pitch)" : "var(--ink)";
+  const solid = scored || winner || bothKnown;
+
+  const lineFor = (c: Contestant, key: number) => {
+    if (c.kind === "pending") {
+      return <TeamLine key={key} pendingLabel={feederLabel(c.from, ctx)} />;
+    }
+    const team = ctx.teamById[c.teamId];
+    if (!team) return <TeamLine key={key} pendingLabel={ctx.slotLabelById[slot] ?? slot} />;
+    let mark: TeamMark | undefined;
+    let role: TeamRole = "option";
+    if (scored) {
+      mark = c.teamId === realWinner ? "realWinner" : c.teamId === winner ? "wrongPick" : "eliminated";
+    } else if (winner) {
+      role = c.teamId === winner ? "winner" : "loser";
+    }
+    return (
+      <TeamLine
+        key={key}
+        team={team}
+        role={role}
+        mark={mark}
+        clickable={clickable}
+        onClick={clickable ? () => onPick(slot, c.teamId) : undefined}
+      />
+    );
+  };
 
   return (
     <div
-      className={[
-        "rounded-xl border-2 border-ink p-3 flex flex-col gap-2",
-        selectedTeam && !staleMatchPick ? "bg-white" : "bg-paper-2",
-      ].join(" ")}
+      className="bg-white rounded-[10px] border-2 border-ink overflow-hidden"
       style={{
-        boxShadow: selectedTeam && !staleMatchPick
-          ? isChampion
-            ? "5px 5px 0 var(--gold)"
-            : "4px 4px 0 var(--ink)"
-          : "3px 3px 0 var(--ink)",
-        borderStyle: selectedTeam && !staleMatchPick ? "solid" : "dashed",
+        boxShadow: `3px 3px 0 ${scored || winner ? edge : accentShadow ?? "var(--ink)"}`,
+        borderStyle: solid ? "solid" : "dashed",
       }}
     >
-      <div className="flex items-center justify-between text-[10px]">
-        <span className="font-mono-sticker uppercase tracking-widest text-ink-soft font-medium">
-          {slot.label}
-        </span>
-        {locked ? (
-          <span className="badge badge-ink !py-0 !text-[10px]">Locked</span>
-        ) : staleMatchPick ? (
-          <span className="badge badge-coral !py-0 !text-[10px]">Re-pick</span>
-        ) : value ? (
-          <span className="badge badge-pitch !py-0 !text-[10px]">✓</span>
-        ) : null}
-      </div>
-      {matchPair ? (
-        <MatchSlotPicker
-          home={matchPair.home}
-          away={matchPair.away}
-          selectedTeamId={
-            staleMatchPick ? null : value
-          }
-          disabled={locked || pending}
-          onPick={onPick}
-        />
-      ) : (
-        <DropdownSlotBody
-          options={options}
-          value={value}
-          selectedTeam={selectedTeam}
-          pending={pending}
-          locked={locked}
-          upstreamEmpty={upstreamEmpty}
-          onPick={onPick}
-        />
+      {cont.map((c, i) => (
+        <div key={i}>
+          {i > 0 && <div className="h-0.5 bg-ink" style={{ opacity: solid ? 1 : 0.3 }} />}
+          {lineFor(c, i)}
+        </div>
+      ))}
+      {stalePick && !scored && (
+        <div className="px-2 py-1 bg-coral text-white font-display uppercase text-[8px] tracking-wider text-center">
+          Re-pick
+        </div>
+      )}
+      {scored && (
+        <div
+          className="flex items-center justify-between gap-1.5 px-2 py-1 font-mono-sticker text-[9px] font-bold tracking-wide text-white"
+          style={{ background: correct ? "var(--pitch)" : "var(--red)" }}
+        >
+          <span className="truncate">
+            {correct
+              ? `✓ ${scoreText(result!)}`
+              : `✗ ${realWinner ? teamCode(ctx.teamById, realWinner) : "?"} ${scoreText(result!)}`}
+          </span>
+          <span className="font-display shrink-0">{correct ? `+${pts}` : "+0"}</span>
+        </div>
       )}
     </div>
   );
 }
 
-function DropdownSlotBody({
+function scoreText(r: SlotResult): string {
+  return r.homeScore != null && r.awayScore != null ? `${r.homeScore}–${r.awayScore}` : "";
+}
+
+type TeamRole = "winner" | "option" | "loser";
+type TeamMark = "realWinner" | "wrongPick" | "eliminated";
+
+function TeamLine({
+  team,
+  pendingLabel,
+  role = "option",
+  mark,
+  clickable,
+  onClick,
+}: {
+  team?: BracketTeam;
+  pendingLabel?: string;
+  role?: TeamRole;
+  mark?: TeamMark;
+  clickable?: boolean;
+  onClick?: () => void;
+}) {
+  if (pendingLabel) {
+    return (
+      <div className="flex items-center gap-2 px-2 py-1.5 text-ink-soft">
+        <span className="inline-flex items-center justify-center w-5 h-5 rounded border-2 border-dashed border-ink-soft font-display text-[11px] shrink-0">
+          ?
+        </span>
+        <span className="font-mono-sticker text-[9.5px] font-medium leading-tight">
+          Winner of <b className="text-ink">{pendingLabel}</b>
+        </span>
+      </div>
+    );
+  }
+  if (!team) return null;
+
+  const isReal = mark === "realWinner";
+  const isWrong = mark === "wrongPick";
+  const label = team.short_name ?? team.code ?? team.name;
+
+  if (mark) {
+    return (
+      <div
+        className="flex items-center gap-2 px-2 py-1.5 w-full"
+        style={{
+          background: isReal ? "color-mix(in srgb, var(--pitch-light) 45%, transparent)" : "transparent",
+          opacity: mark === "eliminated" ? 0.5 : 1,
+        }}
+      >
+        <CountryFlag
+          crestUrl={team.crest_url}
+          code={team.code}
+          name={team.name}
+          size={18}
+          className={isWrong ? "grayscale opacity-60" : undefined}
+        />
+        <span
+          className={[
+            "font-display uppercase text-[12px] tracking-wide flex-1 leading-none truncate",
+            isWrong ? "line-through text-ink-soft" : "text-ink",
+          ].join(" ")}
+        >
+          {label}
+        </span>
+        {isReal && <span className="badge badge-pitch !py-0 !px-1.5 !text-[8px]">✓ Won</span>}
+        {isWrong && (
+          <span className="font-display uppercase text-[8px] tracking-wide text-red shrink-0">
+            Your pick
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  const isWinner = role === "winner";
+  const isLoser = role === "loser";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!clickable}
+      className={[
+        "flex items-center gap-2 px-2 py-1.5 w-full text-left transition-transform",
+        isWinner ? "bg-gold" : "bg-transparent",
+        isLoser ? "text-ink-soft opacity-55" : "text-ink",
+        clickable ? "cursor-pointer hover:-translate-x-px hover:-translate-y-px" : "cursor-default",
+      ].join(" ")}
+    >
+      <CountryFlag crestUrl={team.crest_url} code={team.code} name={team.name} size={18} />
+      <span className="font-display uppercase text-[12px] tracking-wide flex-1 leading-none truncate">
+        {label}
+      </span>
+      {isWinner && <span className="badge badge-pitch !py-0 !px-1.5 !text-[8px]">✓</span>}
+    </button>
+  );
+}
+
+// R32 entry cell before the real fixture is imported: free pick over all teams.
+function DropdownCell({
+  slot,
+  ctx,
   options,
-  value,
-  selectedTeam,
-  pending,
   locked,
-  upstreamEmpty,
+  pending,
   onPick,
 }: {
+  slot: string;
+  ctx: ResolveCtx;
   options: BracketTeam[];
-  value: string | null;
-  selectedTeam: BracketTeam | undefined;
-  pending: boolean;
   locked: boolean;
-  upstreamEmpty: boolean;
-  onPick: (teamId: string) => void;
+  pending: boolean;
+  onPick: (slot: string, teamId: string) => void;
 }) {
+  const value = ctx.picks[slot] ?? null;
+  const selectedTeam = value ? ctx.teamById[value] : undefined;
   return (
-    <>
+    <div
+      className="bg-white rounded-[10px] border-2 border-ink p-2 flex flex-col gap-1.5"
+      style={{ boxShadow: "3px 3px 0 var(--ink)", borderStyle: selectedTeam ? "solid" : "dashed" }}
+    >
       {selectedTeam ? (
         <div className="flex items-center gap-2">
-          <CountryFlag
-            crestUrl={selectedTeam.crest_url}
-            code={selectedTeam.code}
-            name={selectedTeam.name}
-            size={28}
-          />
-          <span className="font-display uppercase text-sm tracking-wide">
-            {selectedTeam.short_name ?? selectedTeam.name}
+          <CountryFlag crestUrl={selectedTeam.crest_url} code={selectedTeam.code} name={selectedTeam.name} size={18} />
+          <span className="font-display uppercase text-[12px] tracking-wide leading-none truncate">
+            {selectedTeam.short_name ?? selectedTeam.code ?? selectedTeam.name}
           </span>
         </div>
       ) : (
         <div className="flex items-center gap-2 text-ink-soft">
-          <span className="inline-flex items-center justify-center w-7 h-7 rounded-md border-2 border-dashed border-ink-soft font-display text-base">
+          <span className="inline-flex items-center justify-center w-5 h-5 rounded border-2 border-dashed border-ink-soft font-display text-[11px]">
             ?
           </span>
-          <span className="text-xs font-medium">
-            {upstreamEmpty ? "Pick upstream first" : "Not picked"}
-          </span>
+          <span className="font-mono-sticker text-[9.5px] font-medium">{slot.replace("-", " #")}</span>
         </div>
       )}
       <select
         value={value ?? ""}
         onChange={(e) => {
-          const next = e.target.value;
-          if (next) onPick(next);
+          if (e.target.value) onPick(slot, e.target.value);
         }}
-        disabled={locked || pending || upstreamEmpty}
-        className="input !text-xs !py-1.5"
+        disabled={locked || pending}
+        className="input !text-[11px] !py-1 !px-2 !shadow-none"
         style={{ boxShadow: "2px 2px 0 var(--ink)" }}
       >
-        <option value="">— pick a team —</option>
+        <option value="">— pick —</option>
         {options.map((t) => (
           <option key={t.id} value={t.id}>
             {t.name}
           </option>
         ))}
       </select>
-    </>
-  );
-}
-
-function MatchSlotPicker({
-  home,
-  away,
-  selectedTeamId,
-  disabled,
-  onPick,
-}: {
-  home: BracketTeam;
-  away: BracketTeam;
-  selectedTeamId: string | null;
-  disabled: boolean;
-  onPick: (teamId: string) => void;
-}) {
-  return (
-    <div className="grid grid-cols-2 gap-2">
-      <MatchSlotTile
-        team={home}
-        selected={selectedTeamId === home.id}
-        disabled={disabled}
-        onClick={() => onPick(home.id)}
-      />
-      <MatchSlotTile
-        team={away}
-        selected={selectedTeamId === away.id}
-        disabled={disabled}
-        onClick={() => onPick(away.id)}
-      />
     </div>
   );
 }
 
-function MatchSlotTile({
-  team,
-  selected,
-  disabled,
-  onClick,
+function ChampionSticker({
+  wPick,
+  fPick,
+  teamById,
+  mode,
+  result,
+  locked,
+  pending,
+  onCrown,
 }: {
-  team: BracketTeam;
-  selected: boolean;
-  disabled: boolean;
-  onClick: () => void;
+  wPick: string | null;
+  fPick: string | null;
+  teamById: Record<string, BracketTeam>;
+  mode: "build" | "live";
+  result: SlotResult | undefined;
+  locked: boolean;
+  pending: boolean;
+  onCrown: () => void;
+}) {
+  const champTeam = wPick ? teamById[wPick] : undefined;
+  const scored = mode === "live" && !!result && result.status === "FINISHED";
+  const realChamp = scored ? result!.winnerTeamId : null;
+  const champCorrect = scored && !!wPick && wPick === realChamp;
+  const champMissed = scored && !!wPick && wPick !== realChamp;
+  const pts = POINTS.bracket.WINNER;
+
+  // Crowned champion sticker.
+  if (champTeam) {
+    return (
+      <div className="w-full max-w-[200px]">
+        <div
+          className={`${champMissed ? "" : "holo"} relative border-2 border-ink rounded-[14px] px-3 py-3 text-center`}
+          style={{
+            background: champMissed ? "var(--white)" : "var(--gold)",
+            boxShadow: `5px 5px 0 ${champMissed ? "var(--red)" : "var(--coral)"}`,
+          }}
+        >
+          <span
+            className="inline-block font-display text-[10px] tracking-[0.12em] px-2.5 py-0.5 rounded-full -rotate-3"
+            style={{
+              background: champMissed ? "var(--red)" : "var(--ink)",
+              color: champMissed ? "var(--white)" : "var(--gold)",
+            }}
+          >
+            {champMissed ? "✗ Not your call" : champCorrect ? "★ Champion ✓" : "★ Champion ★"}
+          </span>
+          <div className="mt-2 flex justify-center">
+            <CountryFlag
+              crestUrl={champTeam.crest_url}
+              code={champTeam.code}
+              name={champTeam.name}
+              size={44}
+              className={champMissed ? "grayscale opacity-60" : undefined}
+            />
+          </div>
+          <div
+            className={[
+              "font-display uppercase text-lg tracking-tight mt-1 leading-none",
+              champMissed ? "line-through text-ink-soft" : "text-ink",
+            ].join(" ")}
+          >
+            {champTeam.name}
+          </div>
+          {champMissed ? (
+            <div className="mt-2 font-mono-sticker text-[10px] font-bold text-ink">
+              Actual: {realChamp ? teamCode(teamById, realChamp) : "?"} · +0
+            </div>
+          ) : (
+            <div className="mt-2 inline-block badge badge-ink !text-[10px]">
+              {champCorrect ? `+${pts} pts ✓` : `+${pts} pts`}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Final winner decided but not yet crowned → offer the crown (build only).
+  if (mode === "build" && fPick) {
+    const f = teamById[fPick];
+    return (
+      <button
+        type="button"
+        onClick={onCrown}
+        disabled={locked || pending}
+        className="w-full max-w-[200px] border-2 border-dashed border-ink rounded-[14px] px-3 py-3 text-center bg-white cursor-pointer transition-transform hover:-translate-x-px hover:-translate-y-px disabled:opacity-60"
+        style={{ boxShadow: "4px 4px 0 var(--gold)" }}
+      >
+        <span className="inline-block badge badge-gold -rotate-2">👑 Crown champion</span>
+        <div className="mt-2 flex items-center justify-center gap-2">
+          {f && <CountryFlag crestUrl={f.crest_url} code={f.code} name={f.name} size={28} />}
+          <span className="font-display uppercase text-sm tracking-tight">{f?.name ?? ""}</span>
+        </div>
+        <div className="mt-1 font-mono-sticker text-[10px] font-bold text-pitch">Tap to bank +{pts}</div>
+      </button>
+    );
+  }
+
+  // Pending — nothing crowned yet.
+  return (
+    <div
+      className="w-full max-w-[200px] border-2 border-dashed border-ink rounded-[14px] px-3 py-3 text-center bg-white"
+      style={{ boxShadow: "4px 4px 0 var(--gold)" }}
+    >
+      <span className="inline-block badge badge-gold -rotate-2">🏆 Champion</span>
+      <div className="my-2 font-mono-sticker text-[10px] text-ink-soft font-semibold leading-snug">
+        Crown your winner once
+        <br />
+        the final is set
+      </div>
+    </div>
+  );
+}
+
+// Header chip reflecting the bracket lifecycle phase.
+function StatusPill({
+  mode,
+  results,
+  slotsByStage,
+}: {
+  mode: "build" | "live";
+  results: Record<string, SlotResult>;
+  slotsByStage: Record<BracketStage, string[]>;
+}) {
+  let text: string;
+  let cls = "badge badge-gold";
+  if (mode === "build") {
+    text = "Round 2 · Knockouts";
+    cls = "badge badge-coral";
+  } else {
+    const finalDone = results["F"]?.status === "FINISHED";
+    if (finalDone) {
+      text = "★ Tournament complete";
+    } else {
+      // name the latest round with any result in.
+      const live = (["SF", "QF", "R16", "R32"] as BracketStage[]).find((st) =>
+        (slotsByStage[st] ?? []).some((s) => results[s]?.status === "FINISHED"),
+      );
+      text = live ? `● Live · ${stageFullLabel(live)} in` : "Bracket locked · awaiting kickoff";
+      cls = live ? "badge badge-coral" : "badge";
+    }
+  }
+  return (
+    <span className={`${cls} -rotate-2`} style={{ boxShadow: "3px 3px 0 var(--ink)" }}>
+      {text}
+    </span>
+  );
+}
+
+function stageFullLabel(s: BracketStage): string {
+  return { R32: "Round of 32", R16: "Round of 16", QF: "Quarter-finals", SF: "Semi-finals", F: "Final", W: "Champion" }[s];
+}
+
+function StageLegend() {
+  return (
+    <div
+      className="flex items-center border-2 border-ink rounded-full overflow-hidden"
+      style={{ boxShadow: "3px 3px 0 var(--ink)" }}
+    >
+      {(["R32", "R16", "QF", "SF", "F"] as BracketStage[]).map((s, i) => (
+        <span
+          key={s}
+          className={`px-2 py-1 font-mono-sticker text-[9px] font-bold tracking-wide text-ink-soft ${i % 2 ? "bg-paper-2" : "bg-white"}`}
+        >
+          {s}
+          <b className="text-pitch"> +{STAGE_PTS[s]}</b>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function PointsHUD({
+  score,
+}: {
+  score: { banked: number; perStage: Record<string, { correct: number; total: number; revealed: boolean; perfect: boolean }>; maxPossible: number };
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={[
-        "rounded-lg border-2 border-ink flex flex-col items-center justify-center gap-1 py-2 px-1 text-center min-h-[68px]",
-        "font-display uppercase tracking-wider text-[11px] leading-tight transition-transform",
-        selected ? "bg-gold text-ink" : "bg-paper-2 text-ink",
-        disabled
-          ? "opacity-60 cursor-not-allowed"
-          : "cursor-pointer hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0 active:translate-y-0",
-      ].join(" ")}
-      style={{ boxShadow: "2px 2px 0 var(--ink)" }}
+    <div
+      className="flex items-center gap-3 bg-white border-2 border-ink rounded-xl px-3 py-2"
+      style={{ boxShadow: "3px 3px 0 var(--ink)" }}
     >
-      <CountryFlag
-        crestUrl={team.crest_url}
-        code={team.code}
-        name={team.name}
-        size={24}
-      />
-      <span className="leading-tight">
-        {team.short_name ?? team.code ?? team.name}
-      </span>
-    </button>
+      <div className="flex flex-col leading-none">
+        <span className="font-display text-2xl tracking-tight">{score.banked}</span>
+        <span className="font-mono-sticker text-[8px] text-ink-soft font-bold tracking-wide">
+          PTS · /{score.maxPossible}
+        </span>
+      </div>
+      <div className="w-0.5 self-stretch bg-ink opacity-15" />
+      <div className="flex gap-2.5">
+        {(["R32", "R16", "QF", "SF", "F"] as BracketStage[]).map((st) => {
+          const ps = score.perStage[st];
+          return (
+            <div key={st} className="text-center" style={{ opacity: ps.revealed ? 1 : 0.4 }}>
+              <div className="font-mono-sticker text-[8px] font-bold text-ink-soft">{st}</div>
+              <div className={`font-display text-[13px] ${ps.perfect ? "text-pitch" : "text-ink"}`}>
+                {ps.revealed ? `${ps.correct}/${ps.total}` : "—"}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
