@@ -4,11 +4,13 @@ import { computeLockState } from "@/lib/scoring/lock";
 import { OutcomesBoard } from "@/components/predict/OutcomesBoard";
 import type { TeamOption } from "@/components/predict/TeamSelect";
 import { CountdownBanner } from "@/components/predict/CountdownBanner";
+import { fetchGroupMatchOptions } from "@/lib/predictions/group-matches";
 
 const PROP_DEFS = [{ key: "first_goal_final", label: "First goal in the Final" }];
 
 type PredictClient = Awaited<ReturnType<typeof supabaseServer>>;
-type PlayerRow = { id: string; name: string; team: { name: string } | null };
+type PlayerTeam = { name: string; code: string | null; crest_url: string | null };
+type PlayerRow = { id: string; name: string; position: string | null; team: PlayerTeam | null };
 
 // The players catalogue is ~1,100+ rows for WC 2026 (48 teams × full squads),
 // which exceeds PostgREST's default page size. A single `.limit(1000)` silently
@@ -23,7 +25,7 @@ async function fetchAllPlayers(client: PredictClient) {
   for (let from = 0; ; from += pageSize) {
     const { data, error } = await client
       .from("players")
-      .select("id, name, team:team_id(name)")
+      .select("id, name, position, team:team_id(name, code, crest_url)")
       .order("name")
       .order("id")
       .range(from, from + pageSize - 1);
@@ -41,22 +43,25 @@ export default async function OutcomesPage() {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const [tournamentRes, tpRes, propsRes, teamsRes, rankingsRes, playersRes, myLeaguesRes] =
+  const [tournamentRes, tpRes, propsRes, teamsRes, rankingsRes, playersRes, groupMatches, myLeaguesRes] =
     await Promise.all([
-    supabase.from("tournament").select("*").single(),
-    supabase.from("tournament_predictions").select("*").eq("user_id", user.id).maybeSingle(),
-    supabase.from("player_prop_predictions").select("prop_key, player_id").eq("user_id", user.id),
-    // The teams catalogue is split: core columns (always present since 0001)
-    // and a separate fifa_ranking fetch that is allowed to fail. Without the
-    // split a missing 0005 column (e.g. `fifa_ranking`) 400s the whole query
-    // and wipes every team-picker; with the split the dropdowns stay populated
-    // and only the dark-horse ranking sort degrades. The ranking error is
-    // still captured to Sentry so the drift is visible.
-    supabase.from("teams").select("id, name, code, group_letter").order("name"),
-    supabase.from("teams").select("id, fifa_ranking"),
-    fetchAllPlayers(supabase),
-    supabase.from("league_members").select("league_id, league:league_id(name)").eq("user_id", user.id),
-  ]);
+      supabase.from("tournament").select("*").single(),
+      supabase.from("tournament_predictions").select("*").eq("user_id", user.id).maybeSingle(),
+      supabase.from("player_prop_predictions").select("prop_key, player_id").eq("user_id", user.id),
+      // The teams catalogue is split: core columns (always present since 0001)
+      // and a separate fifa_ranking fetch that is allowed to fail. Without the
+      // split a missing 0005 column (e.g. `fifa_ranking`) 400s the whole query
+      // and wipes every team-picker; with the split the dropdowns stay populated
+      // and only the dark-horse ranking sort degrades. The ranking error is
+      // still captured to Sentry so the drift is visible.
+      supabase.from("teams").select("id, name, code, group_letter").order("name"),
+      supabase.from("teams").select("id, fifa_ranking"),
+      fetchAllPlayers(supabase),
+      // Group fixtures power the "war game" prop picker; empty pre-import.
+      fetchGroupMatchOptions(supabase),
+      // Leagues the user belongs to → the internal-league-bets cards.
+      supabase.from("league_members").select("league_id, league:league_id(name)").eq("user_id", user.id),
+    ]);
 
   // Surface silent-empty failures of the team/player catalogue queries to
   // Sentry. `rankingsRes` is the one expected to fail when 0005 hasn't been
@@ -118,11 +123,17 @@ export default async function OutcomesPage() {
     code: t.code,
     fifa_ranking: rankingByTeamId.get(t.id) ?? null,
   }));
-  const players = (playersRes.data ?? []).map((p) => ({
-    id: p.id,
-    name: p.name,
-    team_name: (p.team as { name: string } | null)?.name ?? null,
-  }));
+  const players = (playersRes.data ?? []).map((p) => {
+    const team = p.team;
+    return {
+      id: p.id,
+      name: p.name,
+      position: p.position,
+      team_name: team?.name ?? null,
+      team_code: team?.code ?? null,
+      team_crest: team?.crest_url ?? null,
+    };
+  });
   const propPicks = Object.fromEntries(
     (propsRes.data ?? []).map((r) => [r.prop_key as string, r.player_id as string]),
   ) as Record<string, string | null>;
@@ -218,6 +229,7 @@ export default async function OutcomesPage() {
       <OutcomesBoard
         teams={teams}
         players={players}
+        groupMatches={groupMatches}
         initial={{
           winner_team_id: tp?.winner_team_id ?? null,
           runner_up_team_id: tp?.runner_up_team_id ?? null,
@@ -230,6 +242,13 @@ export default async function OutcomesPage() {
           biggest_win_margin_guess: tp?.biggest_win_margin_guess ?? null,
           golden_boot_goals_guess: tp?.golden_boot_goals_guess ?? null,
           total_red_cards_guess: tp?.total_red_cards_guess ?? null,
+          neymar_minutes_pick: tp?.neymar_minutes_pick ?? null,
+          streaker_pick: tp?.streaker_pick ?? null,
+          best_goalkeeper_player_id: tp?.best_goalkeeper_player_id ?? null,
+          golden_boot_team_id: tp?.golden_boot_team_id ?? null,
+          own_goals_guess: tp?.own_goals_guess ?? null,
+          war_game_match_id: tp?.war_game_match_id ?? null,
+          swedish_players_guess: tp?.swedish_players_guess ?? null,
         }}
         propPicks={propPicks}
         propDefs={PROP_DEFS}

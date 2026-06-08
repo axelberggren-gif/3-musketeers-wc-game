@@ -62,6 +62,14 @@ export async function setTournamentPick(values: {
   biggest_win_margin_guess?: number | null;
   golden_boot_goals_guess?: number | null;
   total_red_cards_guess?: number | null;
+  // Admin-resolved "house special" props (migration 0022).
+  neymar_minutes_pick?: boolean | null;
+  streaker_pick?: boolean | null;
+  best_goalkeeper_player_id?: string | null;
+  golden_boot_team_id?: string | null;
+  own_goals_guess?: number | null;
+  war_game_match_id?: string | null;
+  swedish_players_guess?: number | null;
 }) {
   const { supabase, user } = await authedClient();
   const locks = await getLocks();
@@ -120,6 +128,44 @@ export async function setTotalRedCardsGuess(value: number | null) {
     return { ok: false, error: "Pick an integer between 0 and 200." } as const;
   }
   return setTournamentPick({ total_red_cards_guess: value });
+}
+
+// Admin-resolved "house special" props (migration 0022). User picks are plain
+// upserts onto tournament_predictions (round-1 lock enforced by setTournamentPick
+// + the DB trigger); the actual result is entered later by an admin in
+// /admin/props, which is what triggers scoring.
+export async function setNeymarMinutesPick(value: boolean | null) {
+  return setTournamentPick({ neymar_minutes_pick: value });
+}
+
+export async function setStreakerPick(value: boolean | null) {
+  return setTournamentPick({ streaker_pick: value });
+}
+
+export async function setBestGoalkeeperPick(playerId: string | null) {
+  return setTournamentPick({ best_goalkeeper_player_id: playerId });
+}
+
+export async function setGoldenBootTeamPick(teamId: string | null) {
+  return setTournamentPick({ golden_boot_team_id: teamId });
+}
+
+export async function setWarGamePick(matchId: string | null) {
+  return setTournamentPick({ war_game_match_id: matchId });
+}
+
+export async function setOwnGoalsGuess(value: number | null) {
+  if (value != null && (!Number.isInteger(value) || value < 0 || value > 50)) {
+    return { ok: false, error: "Pick an integer between 0 and 50." } as const;
+  }
+  return setTournamentPick({ own_goals_guess: value });
+}
+
+export async function setSwedishPlayersGuess(value: number | null) {
+  if (value != null && (!Number.isInteger(value) || value < 0 || value > 50)) {
+    return { ok: false, error: "Pick an integer between 0 and 50." } as const;
+  }
+  return setTournamentPick({ swedish_players_guess: value });
 }
 
 export async function setPlayerProp(propKey: string, playerId: string) {

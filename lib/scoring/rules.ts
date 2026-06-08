@@ -32,7 +32,12 @@ export const POINTS = {
     totalRedCardsBase: 15,
   },
   playerProp: 10,
-  // Internal league bets, settled at group-stage end (migration 0022). These
+  // Admin-resolved "house special" props (migration 0022): Neymar minutes,
+  // streaker, best goalkeeper, golden-boot team, own-goals count, war-game
+  // match, Swedish-players count. Flat 5 pts each (numeric ones split ties).
+  // Mirrored by points_manual_prop() in 0022_manual_admin_props.sql.
+  manualProp: 5,
+  // Internal league bets, settled at group-stage end (migration 0023). These
   // are LEAGUE-scoped awards (point_awards.league_id set), unlike everything
   // above. loserGuess: a poop voter who picked the actual group-stage loser.
   // loserPerVote: paid to the loser, 2 × poop-votes received. crownPenaltyPerVote:

@@ -11,7 +11,14 @@ import {
 } from "react";
 import { clearBracketPicks, setBracketPick } from "@/lib/predictions/actions";
 import { CountryFlag } from "@/components/CountryFlag";
-import { BRACKET_UPSTREAM, upstreamSlots } from "@/lib/scoring/bracket-tree";
+import {
+  BRACKET_UPSTREAM,
+  R32_QUALIFIERS,
+  qualSourceLabel,
+  slotFriendlyName,
+  upstreamSlots,
+  type GroupFinal,
+} from "@/lib/scoring/bracket-tree";
 import { POINTS, bracketPointsForSlot } from "@/lib/scoring/rules";
 
 export interface BracketTeam {
@@ -57,11 +64,18 @@ interface Props {
   /**
    * Real knockout match pairings keyed by `bracket_slot` (e.g. `R32-1`, `F`).
    * Used for the R32 entry cells: once football-data lands a real R32 fixture the
-   * cell shows the two real teams to pick a winner from; before the draw the R32
-   * cell falls back to a free dropdown over all teams. Downstream cells never use
-   * this — their contestants are always the user's own upstream picks.
+   * cell shows the two real teams to pick a winner from. Downstream cells never
+   * use this — their contestants are always the user's own upstream picks.
    */
   slotMatches: Record<string, BracketMatchPair>;
+  /**
+   * Real final group standings (winner / runner-up) per completed group, keyed
+   * by group letter. Feeds the R32 entry cells: each R32 side is a group
+   * qualification slot (Winner/Runner-up/3rd of Group X per the official
+   * schedule) and resolves to a real team once its group is fully played. Sides
+   * that aren't decided yet show the qualification placeholder instead.
+   */
+  groupFinals: Record<string, GroupFinal>;
   /** Real results per slot, used to score the bracket in live mode. */
   results: Record<string, SlotResult>;
 }
@@ -143,37 +157,62 @@ function elbow(ax: number, ay: number, bx: number, by: number) {
 const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 // ── Contestant + feeder-label resolution ────────────────────────────────────
+// A slot's side is either a known team, a downstream feeder still waiting on the
+// user's upstream pick ("Winner of Quarter-final 1"), or — for R32 entry cells —
+// a group qualification slot not yet resolved ("Runner-up Group K").
 type Contestant =
   | { kind: "team"; teamId: string }
-  | { kind: "pending"; from: string };
+  | { kind: "feeder"; from: string }
+  | { kind: "qualifier"; label: string };
 
 interface ResolveCtx {
   picks: Record<string, string | null>;
   slotMatches: Record<string, BracketMatchPair>;
+  groupFinals: Record<string, GroupFinal>;
   teamById: Record<string, BracketTeam>;
-  slotLabelById: Record<string, string>;
 }
 
-// The two (or one, for W) contestants of a slot. R32 reads the real fixture
-// when imported (else empty → caller renders the free dropdown). Every other
-// slot derives its contestants from the user's own upstream picks.
+// Resolve one R32 group-qualification side to a real team once its group is
+// played, else return null (caller renders the placeholder label). Third-place
+// sides never resolve here — only the imported real fixture fills them.
+function resolveQualTeam(slot: string, idx: 0 | 1, ctx: ResolveCtx): string | null {
+  const src = R32_QUALIFIERS[slot]?.[idx];
+  if (!src) return null;
+  if (src.kind === "third") return null;
+  const final = ctx.groupFinals[src.group];
+  if (!final?.complete) return null;
+  return src.kind === "winner" ? final.winnerTeamId : final.runnerUpTeamId;
+}
+
+// The two (or one, for W) contestants of a slot. R32 prefers the imported real
+// fixture; otherwise each side resolves from its group qualification slot
+// (real group standings) and falls back to the qualification placeholder. Every
+// other slot derives its contestants from the user's own upstream picks.
 function contestantsFor(slot: string, ctx: ResolveCtx): Contestant[] {
   const stage = stageOf(slot);
   if (stage === "R32") {
     const m = ctx.slotMatches[slot];
-    return m
-      ? [
-          { kind: "team", teamId: m.homeTeamId },
-          { kind: "team", teamId: m.awayTeamId },
-        ]
-      : [];
+    if (m) {
+      return [
+        { kind: "team", teamId: m.homeTeamId },
+        { kind: "team", teamId: m.awayTeamId },
+      ];
+    }
+    const sources = R32_QUALIFIERS[slot];
+    if (!sources) return [];
+    return sources.map((src, i): Contestant => {
+      const teamId = resolveQualTeam(slot, i as 0 | 1, ctx);
+      return teamId
+        ? { kind: "team", teamId }
+        : { kind: "qualifier", label: qualSourceLabel(src) };
+    });
   }
   if (slot === "W") {
     const f = ctx.picks["F"];
-    return [f ? { kind: "team", teamId: f } : { kind: "pending", from: "F" }];
+    return [f ? { kind: "team", teamId: f } : { kind: "feeder", from: "F" }];
   }
   return upstreamSlots(slot).map((up): Contestant =>
-    ctx.picks[up] ? { kind: "team", teamId: ctx.picks[up]! } : { kind: "pending", from: up },
+    ctx.picks[up] ? { kind: "team", teamId: ctx.picks[up]! } : { kind: "feeder", from: up },
   );
 }
 
@@ -182,14 +221,11 @@ function teamCode(teamById: Record<string, BracketTeam>, id: string): string {
   return t?.code ?? t?.short_name ?? t?.name?.slice(0, 3).toUpperCase() ?? "?";
 }
 
-// "ESP–DEN" for a slot's two feeders, resolving recursively up the tree to real
-// country codes. Bottoms out at an R32 fixture (or its slot label pre-draw).
-function feederLabel(slot: string, ctx: ResolveCtx, joiner = "–"): string {
-  const cs = contestantsFor(slot, ctx);
-  if (cs.length === 0) return ctx.slotLabelById[slot] ?? slot;
-  return cs
-    .map((c) => (c.kind === "team" ? teamCode(ctx.teamById, c.teamId) : feederLabel(c.from, ctx, "/")))
-    .join(joiner);
+// The placeholder text for a not-yet-known side: downstream cells name the
+// feeding round ("Winner of Quarter-final 1"); R32 cells show the group
+// qualification slot ("Runner-up Group K", "3rd Group A/B/C/D/F").
+function pendingLabelFor(c: Extract<Contestant, { kind: "feeder" | "qualifier" }>): string {
+  return c.kind === "feeder" ? `Winner of ${slotFriendlyName(c.from)}` : c.label;
 }
 
 // Banked points + per-stage hit rate for a locked bracket vs reality.
@@ -225,7 +261,15 @@ function bracketScore(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-export function BracketBuilder({ slots, teams, initial, locked, slotMatches, results }: Props) {
+export function BracketBuilder({
+  slots,
+  teams,
+  initial,
+  locked,
+  slotMatches,
+  groupFinals,
+  results,
+}: Props) {
   const [picks, setPicks] = useState<Record<string, string | null>>(initial);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -236,10 +280,6 @@ export function BracketBuilder({ slots, teams, initial, locked, slotMatches, res
     () => Object.fromEntries(teams.map((t) => [t.id, t])) as Record<string, BracketTeam>,
     [teams],
   );
-  const slotLabelById = useMemo(
-    () => Object.fromEntries(slots.map((s) => [s.slot, s.label])),
-    [slots],
-  );
   const slotsByStage = useMemo(() => {
     const acc = {} as Record<BracketStage, string[]>;
     for (const s of slots) (acc[s.stage] ??= []).push(s.slot);
@@ -247,21 +287,8 @@ export function BracketBuilder({ slots, teams, initial, locked, slotMatches, res
   }, [slots]);
 
   const ctx: ResolveCtx = useMemo(
-    () => ({ picks, slotMatches, teamById, slotLabelById }),
-    [picks, slotMatches, teamById, slotLabelById],
-  );
-
-  const optionsFor = useCallback(
-    (slot: string): BracketTeam[] => {
-      const ups = upstreamSlots(slot);
-      if (ups.length === 0) return teams; // R32 free dropdown (pre-draw)
-      return ups
-        .map((u) => picks[u])
-        .filter((id): id is string => !!id)
-        .map((id) => teamById[id])
-        .filter((t): t is BracketTeam => !!t);
-    },
-    [teams, picks, teamById],
+    () => ({ picks, slotMatches, groupFinals, teamById }),
+    [picks, slotMatches, groupFinals, teamById],
   );
 
   const applyPick = useCallback(
@@ -359,7 +386,6 @@ export function BracketBuilder({ slots, teams, initial, locked, slotMatches, res
             locked={locked}
             pending={pending}
             result={results[slot]}
-            options={optionsFor(slot)}
             onPick={applyPick}
           />
         </div>
@@ -451,7 +477,6 @@ export function BracketBuilder({ slots, teams, initial, locked, slotMatches, res
                     locked={locked}
                     pending={pending}
                     result={results["F"]}
-                    options={optionsFor("F")}
                     onPick={applyPick}
                     accentShadow="var(--gold)"
                   />
@@ -479,15 +504,16 @@ export function BracketBuilder({ slots, teams, initial, locked, slotMatches, res
 
       <p className="font-mono-sticker text-[11px] text-ink-soft">
         {mode === "build"
-          ? "Fill the bracket top-down — your R32 winners flow into the next round. Dashed slots read “Winner of …” until you decide. Autosaves; locks at the deadline."
+          ? "Round-of-32 ties fill in from the group stage (Winner / Runner-up / 3rd of each group) as those groups finish — then tap the winner and they flow into the next round. Slots you haven’t reached read “Winner of …”. Autosaves; locks at the deadline."
           : "Bracket locked. Each match banks its points or strikes your pick as results land — your downstream picks persist, they just stop scoring."}
       </p>
     </div>
   );
 }
 
-// ── A single match cell: two stacked team-lines (+ scored footer in live mode),
-//    or a free dropdown for an R32 slot before the draw is imported. ──────────
+// ── A single match cell: two stacked team-lines (+ scored footer in live mode).
+//    Sides that aren't known yet render their placeholder (downstream feeder
+//    "Winner of Quarter-final 1", or an R32 group qualification slot). ─────────
 function MatchCell({
   slot,
   ctx,
@@ -495,7 +521,6 @@ function MatchCell({
   locked,
   pending,
   result,
-  options,
   onPick,
   accentShadow,
 }: {
@@ -505,27 +530,11 @@ function MatchCell({
   locked: boolean;
   pending: boolean;
   result: SlotResult | undefined;
-  options: BracketTeam[];
   onPick: (slot: string, teamId: string) => void;
   accentShadow?: string;
 }) {
-  const stage = stageOf(slot);
   const cont = contestantsFor(slot, ctx);
   const winner = ctx.picks[slot] ?? null;
-
-  // R32 before its real fixture lands → free dropdown (the only free-choice cell).
-  if (stage === "R32" && cont.length === 0) {
-    return (
-      <DropdownCell
-        slot={slot}
-        ctx={ctx}
-        options={options}
-        locked={locked}
-        pending={pending}
-        onPick={onPick}
-      />
-    );
-  }
 
   const knownTeamIds = cont.flatMap((c) => (c.kind === "team" ? [c.teamId] : []));
   const bothKnown = cont.length >= 2 && cont.every((c) => c.kind === "team");
@@ -541,11 +550,11 @@ function MatchCell({
   const solid = scored || winner || bothKnown;
 
   const lineFor = (c: Contestant, key: number) => {
-    if (c.kind === "pending") {
-      return <TeamLine key={key} pendingLabel={feederLabel(c.from, ctx)} />;
+    if (c.kind !== "team") {
+      return <TeamLine key={key} pendingLabel={pendingLabelFor(c)} />;
     }
     const team = ctx.teamById[c.teamId];
-    if (!team) return <TeamLine key={key} pendingLabel={ctx.slotLabelById[slot] ?? slot} />;
+    if (!team) return <TeamLine key={key} pendingLabel={slotFriendlyName(slot)} />;
     let mark: TeamMark | undefined;
     let role: TeamRole = "option";
     if (scored) {
@@ -629,8 +638,8 @@ function TeamLine({
         <span className="inline-flex items-center justify-center w-5 h-5 rounded border-2 border-dashed border-ink-soft font-display text-[11px] shrink-0">
           ?
         </span>
-        <span className="font-mono-sticker text-[9.5px] font-medium leading-tight">
-          Winner of <b className="text-ink">{pendingLabel}</b>
+        <span className="font-mono-sticker text-[9.5px] font-medium leading-tight text-ink">
+          {pendingLabel}
         </span>
       </div>
     );
@@ -639,7 +648,7 @@ function TeamLine({
 
   const isReal = mark === "realWinner";
   const isWrong = mark === "wrongPick";
-  const label = team.short_name ?? team.code ?? team.name;
+  const label = team.code ?? team.short_name ?? team.name;
 
   if (mark) {
     return (
@@ -695,64 +704,6 @@ function TeamLine({
       </span>
       {isWinner && <span className="badge badge-pitch !py-0 !px-1.5 !text-[8px]">✓</span>}
     </button>
-  );
-}
-
-// R32 entry cell before the real fixture is imported: free pick over all teams.
-function DropdownCell({
-  slot,
-  ctx,
-  options,
-  locked,
-  pending,
-  onPick,
-}: {
-  slot: string;
-  ctx: ResolveCtx;
-  options: BracketTeam[];
-  locked: boolean;
-  pending: boolean;
-  onPick: (slot: string, teamId: string) => void;
-}) {
-  const value = ctx.picks[slot] ?? null;
-  const selectedTeam = value ? ctx.teamById[value] : undefined;
-  return (
-    <div
-      className="bg-white rounded-[10px] border-2 border-ink p-2 flex flex-col gap-1.5"
-      style={{ boxShadow: "3px 3px 0 var(--ink)", borderStyle: selectedTeam ? "solid" : "dashed" }}
-    >
-      {selectedTeam ? (
-        <div className="flex items-center gap-2">
-          <CountryFlag crestUrl={selectedTeam.crest_url} code={selectedTeam.code} name={selectedTeam.name} size={18} />
-          <span className="font-display uppercase text-[12px] tracking-wide leading-none truncate">
-            {selectedTeam.short_name ?? selectedTeam.code ?? selectedTeam.name}
-          </span>
-        </div>
-      ) : (
-        <div className="flex items-center gap-2 text-ink-soft">
-          <span className="inline-flex items-center justify-center w-5 h-5 rounded border-2 border-dashed border-ink-soft font-display text-[11px]">
-            ?
-          </span>
-          <span className="font-mono-sticker text-[9.5px] font-medium">{slot.replace("-", " #")}</span>
-        </div>
-      )}
-      <select
-        value={value ?? ""}
-        onChange={(e) => {
-          if (e.target.value) onPick(slot, e.target.value);
-        }}
-        disabled={locked || pending}
-        className="input !text-[11px] !py-1 !px-2 !shadow-none"
-        style={{ boxShadow: "2px 2px 0 var(--ink)" }}
-      >
-        <option value="">— pick —</option>
-        {options.map((t) => (
-          <option key={t.id} value={t.id}>
-            {t.name}
-          </option>
-        ))}
-      </select>
-    </div>
   );
 }
 

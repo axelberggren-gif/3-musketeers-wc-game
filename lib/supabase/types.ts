@@ -574,6 +574,61 @@ export type Database = {
           },
         ];
       };
+      manual_prop_resolutions: {
+        Row: {
+          prop_key: string;
+          answer_bool: boolean | null;
+          answer_int: number | null;
+          answer_team_id: string | null;
+          answer_player_id: string | null;
+          answer_match_id: string | null;
+          resolved_at: string;
+          resolved_by: string | null;
+        };
+        Insert: {
+          prop_key: string;
+          answer_bool?: boolean | null;
+          answer_int?: number | null;
+          answer_team_id?: string | null;
+          answer_player_id?: string | null;
+          answer_match_id?: string | null;
+          resolved_at?: string;
+          resolved_by?: string | null;
+        };
+        Update: {
+          prop_key?: string;
+          answer_bool?: boolean | null;
+          answer_int?: number | null;
+          answer_team_id?: string | null;
+          answer_player_id?: string | null;
+          answer_match_id?: string | null;
+          resolved_at?: string;
+          resolved_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "manual_prop_resolutions_answer_team_id_fkey";
+            columns: ["answer_team_id"];
+            isOneToOne: false;
+            referencedRelation: "teams";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "manual_prop_resolutions_answer_player_id_fkey";
+            columns: ["answer_player_id"];
+            isOneToOne: false;
+            referencedRelation: "players";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "manual_prop_resolutions_answer_match_id_fkey";
+            columns: ["answer_match_id"];
+            isOneToOne: false;
+            referencedRelation: "matches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       player_prop_resolutions: {
         Row: {
           prop_key: string;
@@ -843,6 +898,13 @@ export type Database = {
           biggest_win_margin_guess: number | null;
           golden_boot_goals_guess: number | null;
           total_red_cards_guess: number | null;
+          neymar_minutes_pick: boolean | null;
+          streaker_pick: boolean | null;
+          best_goalkeeper_player_id: string | null;
+          golden_boot_team_id: string | null;
+          own_goals_guess: number | null;
+          war_game_match_id: string | null;
+          swedish_players_guess: number | null;
           submitted_at: string;
         };
         Insert: {
@@ -858,6 +920,13 @@ export type Database = {
           biggest_win_margin_guess?: number | null;
           golden_boot_goals_guess?: number | null;
           total_red_cards_guess?: number | null;
+          neymar_minutes_pick?: boolean | null;
+          streaker_pick?: boolean | null;
+          best_goalkeeper_player_id?: string | null;
+          golden_boot_team_id?: string | null;
+          own_goals_guess?: number | null;
+          war_game_match_id?: string | null;
+          swedish_players_guess?: number | null;
           submitted_at?: string;
         };
         Update: {
@@ -873,6 +942,13 @@ export type Database = {
           biggest_win_margin_guess?: number | null;
           golden_boot_goals_guess?: number | null;
           total_red_cards_guess?: number | null;
+          neymar_minutes_pick?: boolean | null;
+          streaker_pick?: boolean | null;
+          best_goalkeeper_player_id?: string | null;
+          golden_boot_team_id?: string | null;
+          own_goals_guess?: number | null;
+          war_game_match_id?: string | null;
+          swedish_players_guess?: number | null;
           submitted_at?: string;
         };
         Relationships: [
@@ -916,6 +992,27 @@ export type Database = {
             columns: ["winner_team_id"];
             isOneToOne: false;
             referencedRelation: "teams";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "tournament_predictions_best_goalkeeper_player_id_fkey";
+            columns: ["best_goalkeeper_player_id"];
+            isOneToOne: false;
+            referencedRelation: "players";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "tournament_predictions_golden_boot_team_id_fkey";
+            columns: ["golden_boot_team_id"];
+            isOneToOne: false;
+            referencedRelation: "teams";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "tournament_predictions_war_game_match_id_fkey";
+            columns: ["war_game_match_id"];
+            isOneToOne: false;
+            referencedRelation: "matches";
             referencedColumns: ["id"];
           },
         ];
@@ -983,6 +1080,10 @@ export type Database = {
         Returns: number;
       };
       score_highest_match_goals_guess: {
+        Args: Record<PropertyKey, never>;
+        Returns: number;
+      };
+      score_manual_props: {
         Args: Record<PropertyKey, never>;
         Returns: number;
       };
