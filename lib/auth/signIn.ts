@@ -47,15 +47,33 @@ export async function verifyEmailOtp(
   if (!trimmedToken) return { ok: false, error: "Enter the code from your email" };
 
   const supabase = await supabaseServer();
-  // type: "email" is the OTP issued by signInWithOtp (passwordless email).
-  // On success supabaseServer()'s cookie adapter persists the session — this
-  // runs in a Server Action, so the cookie writes succeed (unlike in an RSC).
-  const { error } = await supabase.auth.verifyOtp({
+  // Verifying the code here (rather than via the email link) keeps sign-in on a
+  // single device: the code is entered in the same browser/session that asked
+  // for it, so there's no PKCE code-verifier or URL-hash to lose. On success
+  // supabaseServer()'s cookie adapter persists the session — this runs in a
+  // Server Action, so the cookie writes succeed (unlike in an RSC).
+  //
+  // A brand-new user's *first* email is Supabase's "Confirm signup" template,
+  // whose code verifies as type:"signup"; a returning user gets the "Magic Link"
+  // template (type:"email"). We try "email" first, then fall back to "signup",
+  // so a new user's single emailed code is accepted on the first attempt instead
+  // of being bounced back to re-enter their email (the OTP value is identical —
+  // only the `type` GoTrue expects differs).
+  const primary = await supabase.auth.verifyOtp({
     email: trimmedEmail,
     token: trimmedToken,
     type: "email",
   });
-  if (error) return { ok: false, error: error.message };
+  if (primary.error) {
+    const fallback = await supabase.auth.verifyOtp({
+      email: trimmedEmail,
+      token: trimmedToken,
+      type: "signup",
+    });
+    // Surface the primary (magic-link) error — it's the canonical path and its
+    // message ("Token has expired or is invalid") is the one users expect.
+    if (fallback.error) return { ok: false, error: primary.error.message };
+  }
 
   // Bounce invites through /join/[token] so the single redemption code path
   // (shared with the magic-link callback) handles success + visible failure.

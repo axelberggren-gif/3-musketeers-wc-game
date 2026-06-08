@@ -57,6 +57,40 @@ describe("verifyEmailOtp", () => {
     });
   });
 
+  it("falls back to type 'signup' so a new user's confirm-signup code works first try", async () => {
+    // A brand-new user's first email is the "Confirm signup" template, whose
+    // code verifies as type:"signup", not "email". The email-type attempt fails;
+    // the signup-type fallback succeeds — no second email entry required.
+    verifyOtp
+      .mockResolvedValueOnce({ error: { message: "Token has expired or is invalid" } })
+      .mockResolvedValueOnce({ error: null });
+
+    expect(await verifyEmailOtp("a@b.com", "123456")).toEqual({
+      ok: true,
+      redirectTo: "/leagues",
+    });
+    expect(verifyOtp).toHaveBeenNthCalledWith(1, {
+      email: "a@b.com",
+      token: "123456",
+      type: "email",
+    });
+    expect(verifyOtp).toHaveBeenNthCalledWith(2, {
+      email: "a@b.com",
+      token: "123456",
+      type: "signup",
+    });
+  });
+
+  it("surfaces the primary (email-type) error when both OTP types fail", async () => {
+    verifyOtp
+      .mockResolvedValueOnce({ error: { message: "email-type failed" } })
+      .mockResolvedValueOnce({ error: { message: "signup-type failed" } });
+    expect(await verifyEmailOtp("a@b.com", "000000")).toEqual({
+      ok: false,
+      error: "email-type failed",
+    });
+  });
+
   it("redirects to /leagues when there is no invite token", async () => {
     expect(await verifyEmailOtp("a@b.com", "123456")).toEqual({
       ok: true,
