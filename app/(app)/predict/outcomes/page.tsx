@@ -4,6 +4,7 @@ import { computeLockState } from "@/lib/scoring/lock";
 import { OutcomesBoard } from "@/components/predict/OutcomesBoard";
 import type { TeamOption } from "@/components/predict/TeamSelect";
 import { CountdownBanner } from "@/components/predict/CountdownBanner";
+import { fetchGroupMatchOptions } from "@/lib/predictions/group-matches";
 
 const PROP_DEFS = [{ key: "first_goal_final", label: "First goal in the Final" }];
 
@@ -42,20 +43,23 @@ export default async function OutcomesPage() {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const [tournamentRes, tpRes, propsRes, teamsRes, rankingsRes, playersRes] = await Promise.all([
-    supabase.from("tournament").select("*").single(),
-    supabase.from("tournament_predictions").select("*").eq("user_id", user.id).maybeSingle(),
-    supabase.from("player_prop_predictions").select("prop_key, player_id").eq("user_id", user.id),
-    // The teams catalogue is split: core columns (always present since 0001)
-    // and a separate fifa_ranking fetch that is allowed to fail. Without the
-    // split a missing 0005 column (e.g. `fifa_ranking`) 400s the whole query
-    // and wipes every team-picker; with the split the dropdowns stay populated
-    // and only the dark-horse ranking sort degrades. The ranking error is
-    // still captured to Sentry so the drift is visible.
-    supabase.from("teams").select("id, name, code, group_letter").order("name"),
-    supabase.from("teams").select("id, fifa_ranking"),
-    fetchAllPlayers(supabase),
-  ]);
+  const [tournamentRes, tpRes, propsRes, teamsRes, rankingsRes, playersRes, groupMatches] =
+    await Promise.all([
+      supabase.from("tournament").select("*").single(),
+      supabase.from("tournament_predictions").select("*").eq("user_id", user.id).maybeSingle(),
+      supabase.from("player_prop_predictions").select("prop_key, player_id").eq("user_id", user.id),
+      // The teams catalogue is split: core columns (always present since 0001)
+      // and a separate fifa_ranking fetch that is allowed to fail. Without the
+      // split a missing 0005 column (e.g. `fifa_ranking`) 400s the whole query
+      // and wipes every team-picker; with the split the dropdowns stay populated
+      // and only the dark-horse ranking sort degrades. The ranking error is
+      // still captured to Sentry so the drift is visible.
+      supabase.from("teams").select("id, name, code, group_letter").order("name"),
+      supabase.from("teams").select("id, fifa_ranking"),
+      fetchAllPlayers(supabase),
+      // Group fixtures power the "war game" prop picker; empty pre-import.
+      fetchGroupMatchOptions(supabase),
+    ]);
 
   // Surface silent-empty failures of the team/player catalogue queries to
   // Sentry. `rankingsRes` is the one expected to fail when 0005 hasn't been
@@ -160,6 +164,7 @@ export default async function OutcomesPage() {
       <OutcomesBoard
         teams={teams}
         players={players}
+        groupMatches={groupMatches}
         initial={{
           winner_team_id: tp?.winner_team_id ?? null,
           runner_up_team_id: tp?.runner_up_team_id ?? null,
@@ -172,6 +177,13 @@ export default async function OutcomesPage() {
           biggest_win_margin_guess: tp?.biggest_win_margin_guess ?? null,
           golden_boot_goals_guess: tp?.golden_boot_goals_guess ?? null,
           total_red_cards_guess: tp?.total_red_cards_guess ?? null,
+          neymar_minutes_pick: tp?.neymar_minutes_pick ?? null,
+          streaker_pick: tp?.streaker_pick ?? null,
+          best_goalkeeper_player_id: tp?.best_goalkeeper_player_id ?? null,
+          golden_boot_team_id: tp?.golden_boot_team_id ?? null,
+          own_goals_guess: tp?.own_goals_guess ?? null,
+          war_game_match_id: tp?.war_game_match_id ?? null,
+          swedish_players_guess: tp?.swedish_players_guess ?? null,
         }}
         propPicks={propPicks}
         propDefs={PROP_DEFS}
