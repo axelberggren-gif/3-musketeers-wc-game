@@ -185,8 +185,8 @@ flowchart TD
 - As the league owner, open `/leagues/<slug>/members`.
 - Verify the **Invite links** card is present.
 - Click **+ New invite** → button flips to "Creating…", and a new row appears at the top of the list.
-- Verify defaults: `max_uses = 25`, `expires_at = now + 30 days`, `uses_count = 0`, `revoked = false`.
-- The new row shows the full `https://<origin>/join/<token>` URL, a `0/25` counter, **Copy** and **Revoke** buttons.
+- Verify defaults: `max_uses = 100`, `expires_at = now + 30 days`, `uses_count = 0`, `revoked = false`.
+- The new row shows the full `https://<origin>/join/<token>` URL, a `0/100` counter, **Copy** and **Revoke** buttons.
 
 ### C6. Copy an invite URL
 - Click **Copy** on an active invite. Verify the button label flips to **Copied** for 1.5 s.
