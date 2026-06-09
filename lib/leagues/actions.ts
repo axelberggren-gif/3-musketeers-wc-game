@@ -204,12 +204,13 @@ export async function removeLeagueMember(leagueId: string, userId: string, leagu
 
   // Tidy this user's league-scoped leftovers. All are no-ops pre-kickoff (the
   // common "prune a duplicate" case); defensive for mid-tournament removals.
-  // Their crown/spoon votes + votes cast for them in this league:
-  await service
-    .from("league_group_bets")
-    .delete()
-    .eq("league_id", leagueId)
-    .or(`voter_id.eq.${userId},votee_id.eq.${userId}`);
+  // Their crown/spoon votes + votes cast for them in this league. Two explicit
+  // .eq() deletes rather than a string-interpolated .or() — userId is a
+  // client-supplied server-action arg, and interpolating it into a PostgREST
+  // filter string would let a crafted value inject extra filter terms (e.g.
+  // a `neq` matching every row). .eq() URL-encodes the value, so it can't.
+  await service.from("league_group_bets").delete().eq("league_id", leagueId).eq("voter_id", userId);
+  await service.from("league_group_bets").delete().eq("league_id", leagueId).eq("votee_id", userId);
   // League-scoped awards only — global awards (league_id IS NULL) belong to the
   // user's other leagues and are left untouched.
   await service.from("point_awards").delete().eq("league_id", leagueId).eq("user_id", userId);
