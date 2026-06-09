@@ -53,8 +53,8 @@ nobody is surprised when their prod login stops working.
 **Resolved (2026-06-02).** Went further than the suggested guard — the
 `DEV_INSTANT_LOGIN` path was removed wholesale ahead of production onboarding.
 `signInWithEmail` now only does the magic-link `signInWithOtp` round-trip, so
-there is no bypass left to leak. (The `DEV_INSTANT_LOGIN=` placeholder still
-needs deleting from `.env.example` by hand — it's harness-protected.)
+there is no bypass left to leak. (The `DEV_INSTANT_LOGIN=` placeholder was
+removed from `.env.example` on 2026-06-09 — no residue remains.)
 
 ---
 

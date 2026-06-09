@@ -2,10 +2,10 @@
 
 A friends-only World Cup prediction game built with Next.js (App Router), Supabase (Postgres + Auth + Realtime + pg_cron), Tailwind, and the football-data.org API. Players join private leagues via invite links and submit predictions in two rounds:
 
-- **Round 1** — pre-tournament: 1X2 picks for all 48 group-stage matches + tournament winner, runner-up, golden boot, dark horse, and player props. Locks at first kickoff. Editable until then.
-- **Round 2** — knockouts: R16 → QF → SF → Final bracket plus an overall champion pick. Opens after group stage, locks at R16 kickoff.
+- **Round 1** — pre-tournament: 1X2 picks for all 72 group-stage matches (WC 2026 has 104 matches total) + tournament winner, runner-up, golden boot, dark horse, and player props. Locks at first kickoff. Editable until then.
+- **Round 2** — knockouts: R32 → R16 → QF → SF → Final bracket plus an overall champion pick. Opens after group stage, locks at knockout start.
 
-Scoring is flat points (see `lib/scoring/rules.ts`). Friends' picks for a given match become visible to other league members only after that match kicks off.
+Scoring is flat points (see `lib/scoring/rules.ts`). Friends' group-stage picks become visible to other league members once round 1 locks; bracket picks reveal per slot.
 
 ## Quick start
 
@@ -20,11 +20,10 @@ Scoring is flat points (see `lib/scoring/rules.ts`). Friends' picks for a given 
 
 ### 2. Run the migrations
 
-In Supabase **SQL Editor**, paste and run in order:
-
-1. `supabase/migrations/0001_init.sql` — tables, RLS, lock triggers, signup hook.
-2. `supabase/migrations/0002_scoring.sql` — scoring functions + leaderboard view.
-3. `supabase/migrations/0003_cron.sql` — pg_cron jobs that call `/api/cron/...`.
+In Supabase **SQL Editor**, paste and run **every** file in `supabase/migrations/` in
+numeric order (`0001_init.sql` → the highest-numbered file). The first three lay the
+foundation (tables/RLS/lock triggers → scoring functions + leaderboard view → pg_cron
+jobs); the rest are required follow-ups — skipping any leaves scoring or RLS broken.
 
 Before applying `0003_cron.sql`, set these custom Postgres GUCs (Settings → Database → Custom Postgres config):
 
@@ -89,14 +88,17 @@ Open http://localhost:3000.
 ```
 app/
   (app)/                 # authenticated routes (predict, leagues, match, profile, admin)
-  (auth)/                # login + join/[token]
+  (auth)/                # login + join/[token] + welcome
   api/cron/              # cron endpoints called by pg_cron
-  auth/callback/         # magic-link callback
+  auth/                  # callback (magic link) + confirm (token_hash) handlers
   page.tsx               # landing
 components/
-  predict/               # MatchPickCard, BracketBuilder, TournamentForm, CountdownBanner
-  stats/AccuracyChart    # recharts wrapper
-  Nav, SignOutButton, CountryFlag
+  predict/               # MatchPickCard, BracketBuilder, OutcomesBoard, CountdownBanner
+  banter/                # league chat feed + composers
+  league-bets/           # crown/wooden-spoon voting + badges
+  social/                # pick reactions
+  stats/                 # PickPersonality profile card
+  Nav, NavTabs, SignOutButton, CountryFlag, LocalKickoff
 lib/
   supabase/              # server/browser/proxy clients + db types
   football-data/         # API client + sync orchestrator
@@ -112,7 +114,7 @@ proxy.ts                 # Supabase session refresh (Next 16 proxy convention)
 
 ## Verification before kickoff
 
-1. Run all three migrations in order.
+1. Run all migrations in order.
 2. Seed teams + players → `/admin/sync`.
 3. Run **Sync fixtures + results** at least once.
 4. Sign up two emails (private window for the second) via an invite link.
@@ -125,7 +127,7 @@ proxy.ts                 # Supabase session refresh (Next 16 proxy convention)
 
 ## Notes
 
-- Friends' picks are gated by RLS — they only become visible to other shared-league members once the relevant match has kicked off.
+- Friends' picks are gated by RLS — group-stage 1X2 picks reveal to shared-league members once round 1 locks (first kickoff); bracket picks reveal per slot.
 - All scoring is idempotent via `point_awards.idempotency_key`. Re-running cron is safe.
-- The bracket builder uses a flat team list for each slot. After group stage, you can constrain options to surviving teams in `buildSlotDefs` (in `app/(app)/predict/bracket/page.tsx`).
-- Point values live in two places — keep them in sync: `lib/scoring/rules.ts` (for UI display) and the `points_*` SQL functions in `0002_scoring.sql` (for actual awarding).
+- The bracket builder is the "Wall Chart" — a symmetric tournament poster. R32 entry cells are the official group-qualification matchups (they resolve to real teams as groups finish / fixtures import); downstream rounds fill top-down from your own picks.
+- Point values live in two places — keep them in sync: `lib/scoring/rules.ts` (for UI display) and the `points_*` SQL functions spread across several migrations (for actual awarding) — see the points-sync invariant in `lib/scoring/CLAUDE.md` for the authoritative list. `lib/scoring/points-sync.test.ts` fails CI on drift in either direction.

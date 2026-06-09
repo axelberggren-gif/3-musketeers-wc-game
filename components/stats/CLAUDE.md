@@ -14,11 +14,8 @@ Read-only stat visualisations rendered on `/profile/[username]`. The aggregation
   Knockout accuracy / Bracket survival — a solid user fill over a hatched
   `repeating-linear-gradient` league-average ghost track), and three secondary tiles
   (Boldness %, Avg pick time, Upsets called). Hand-rolled bars (div widths in `%`), all
-  colours from `globals.css` tokens — **no chart library**.
-- `AccuracyChart.tsx` — **orphaned**. The rejected per-MD cumulative-points line chart
-  (recharts). No longer rendered anywhere (per chat2: "per-MD doesn't apply — all
-  predictions lock at tournament start") and uses stale legacy tokens (`var(--muted)` /
-  `var(--accent)`). Deletion candidate (+ dropping the `recharts` dep) — don't mirror it.
+  colours from `globals.css` tokens — **no chart library**. Currently the directory's
+  only component.
 
 ## Conventions
 - **Server-rendered + presentational.** Take fully-aggregated, plain-serialisable props
@@ -45,6 +42,11 @@ Read-only stat visualisations rendered on `/profile/[username]`. The aggregation
   `z-index` so the two never visually merge (mirrors the `.pitch-stripes` idiom).
 
 ## Recent changes
+- 2026-06-09: Deleted `AccuracyChart.tsx` (and the `recharts` dependency, alongside four
+  other unused deps repo-wide). The per-MD cumulative-points line chart was rejected
+  ("per-MD doesn't apply — all predictions lock at tournament start"), rendered nowhere,
+  and used stale legacy tokens. `PickPersonality.tsx` is now the directory's only
+  component; the hand-rolled-bars / no-chart-library convention stands.
 - 2026-06-09: `PickPersonality.tsx` bracket-survival hint reads `played {N} KO` (was `won {N} KO`) — `userSample` is the champion's games played, not won (follow-up to #120 review).
 - 2026-06-09: Created `PickPersonality.tsx` for `DESIGN_MISALIGNMENTS.md` §4 — replaces the
   profile-page placeholder. Backed by the new `lib/stats/personality.ts` aggregator +

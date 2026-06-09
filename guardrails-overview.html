@@ -288,10 +288,10 @@
       the database, the build, and at commit time.
     </p>
     <div class="stat-row">
-      <div class="stat"><b>9</b><span>GitHub workflows</span></div>
+      <div class="stat"><b>11</b><span>GitHub workflows</span></div>
       <div class="stat"><b>3</b><span>required PR checks</span></div>
-      <div class="stat"><b>5</b><span>test suites (vitest)</span></div>
-      <div class="stat"><b>10</b><span>canon CLAUDE.md docs</span></div>
+      <div class="stat"><b>12</b><span>test suites (vitest)</span></div>
+      <div class="stat"><b>14</b><span>canon CLAUDE.md docs</span></div>
       <div class="stat"><b>3×</b><span>defense layers per invariant</span></div>
     </div>
   </div>
@@ -406,7 +406,7 @@
 
       <div class="card">
         <h3><span class="chip ci">CI</span> SHA-pinned actions</h3>
-        <p>Every <code class="mono">uses:</code> across all nine workflows is pinned to a full 40-char commit SHA
+        <p>Every <code class="mono">uses:</code> across all eleven workflows is pinned to a full 40-char commit SHA
            (with a <code class="mono"># v4</code> comment), never a mutable tag. Closes the supply-chain hole behind
            the 2025 <em>tj-actions</em> and 2026 <em>trivy-action</em> tag-hijack attacks that exfiltrated CI secrets.</p>
         <div class="files"><span class="file">.github/workflows/*</span></div>
@@ -442,6 +442,25 @@
            scanning + push protection. Catches the documented AI failure mode of hardcoding the Supabase service-role
            key or <code class="mono">CRON_SECRET</code>.</p>
         <div class="files"><span class="file">.github/workflows/secret-scan.yml</span></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip ci">CI</span> Changelog guard</h3>
+        <p>Any PR touching runtime code (<code class="mono">app/</code>, <code class="mono">components/</code>,
+           <code class="mono">lib/</code>, <code class="mono">supabase/</code>) must update <code class="mono">CHANGELOG.md</code>,
+           and the added lines must reference the PR number (<code class="mono">#NN</code>). Turns the worst-drifting
+           convention into a machine check; the <code class="mono">skip-changelog</code> label is the escape hatch.
+           Checkout-free — pure GitHub API.</p>
+        <div class="files"><span class="file">.github/workflows/changelog-guard.yml</span></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip ci">CI</span> ESLint core correctness</h3>
+        <p><code class="mono">js.configs.recommended</code> runs ahead of the Next configs (eslint-config-next alone
+           leaves every <code class="mono">eslint:recommended</code> rule off), with <code class="mono">no-unreachable</code>
+           explicitly re-enabled for TS files — the typescript-eslint overlay disables it, which is how a shipped
+           unreachable-code bug once passed lint. Empty <code class="mono">catch {}</code> blocks now need an intent comment.</p>
+        <div class="files"><span class="file">eslint.config.mjs</span></div>
       </div>
     </div>
   </section>
@@ -501,6 +520,15 @@
         <p>Posts one inline comment per blocker anchored to the offending line, then a single formal review summarising
            findings — the same artifact the gate step reads back.</p>
       </div>
+
+      <div class="card">
+        <h3><span class="chip ci">CI</span> Post-merge review follow-up</h3>
+        <p>The review gate can lose the race to the merge (it happened twice — verdicts posted <em>after</em> the PR
+           landed, and the blockers vanished). When a CHANGES_REQUESTED review arrives on an already-merged PR, this
+           workflow files a <code class="mono">prio:P1</code> issue carrying the full review, so post-merge blockers
+           survive until triaged. Deduped by title; the review body is passed via env, never interpolated into shell.</p>
+        <div class="files"><span class="file">.github/workflows/review-followup.yml</span></div>
+      </div>
     </div>
   </section>
 
@@ -515,10 +543,18 @@
     <div class="grid">
       <div class="card">
         <h3><span class="chip hook">git&nbsp;hook</span> Husky pre-commit</h3>
-        <p>Runs <code class="mono">npm run lint &amp;&amp; npm run typecheck</code> on every commit, catching the two
-           cheapest failures before they reach CI. Wired up automatically via the <code class="mono">prepare: husky</code>
-           install script.</p>
+        <p>Runs <code class="mono">npm run lint &amp;&amp; npm run typecheck &amp;&amp; npm test</code> on every commit
+           (the vitest suite costs ~1.4&nbsp;s), catching the three cheapest failures before they reach CI. Wired up
+           automatically via the <code class="mono">prepare: husky</code> install script.</p>
         <div class="files"><span class="file">.husky/pre-commit</span></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="chip hook">git&nbsp;hook</span> Commit-message gate</h3>
+        <p>A <code class="mono">commit-msg</code> hook validates the Conventional Commits subject and requires the
+           <code class="mono">Co-authored-by</code> AI trailer on every commit — the two AGENTS.md rules that drifted
+           most under convention alone. Merge / revert / fixup messages pass through. POSIX sh, no deps.</p>
+        <div class="files"><span class="file">.husky/commit-msg</span></div>
       </div>
 
       <div class="card">
@@ -548,11 +584,14 @@
 
     <div class="grid">
       <div class="card">
-        <h3><span class="chip ci">CI</span> Points-sync drift</h3>
-        <p>Asserts every value in the <code class="mono">POINTS</code> object matches its SQL twin. If TS and the
-           <code class="mono">points_*</code> SQL functions ever skew, this test goes red instead of silently
-           mis-scoring the league.</p>
-        <div class="files"><span class="file">lib/scoring/rules.test.ts</span></div>
+        <h3><span class="chip ci">CI</span> Points-sync drift (both directions)</h3>
+        <p><code class="mono">rules.test.ts</code> pins every value in the <code class="mono">POINTS</code> object;
+           <code class="mono">points-sync.test.ts</code> covers the SQL side — it parses the migrations in apply order
+           (last <code class="mono">create or replace</code> wins, drops remove) and asserts the live
+           <code class="mono">points_*()</code> constants equal <code class="mono">POINTS</code> in both directions,
+           plus <code class="mono">points_bracket_slot()</code>'s CASE arms. A migration that skews a point value now
+           goes red instead of silently mis-scoring the league.</p>
+        <div class="files"><span class="file">lib/scoring/rules.test.ts</span><span class="file">lib/scoring/points-sync.test.ts</span></div>
       </div>
 
       <div class="card">
@@ -868,12 +907,6 @@
         <div class="files"><a class="file" href="https://github.com/axelberggren-gif/3-musketeers-wc-game/issues/75">#75 · prio:P2</a></div>
       </div>
 
-      <div class="card">
-        <h3><span class="chip hook">git&nbsp;hook</span> Co-author trailer hook</h3>
-        <p>A <code class="mono">commit-msg</code> hook that enforces the AGENTS.md-mandated
-           <code class="mono">Co-authored-by: Claude</code> trailer the analytics attribution relies on.</p>
-        <div class="files"><a class="file" href="https://github.com/axelberggren-gif/3-musketeers-wc-game/issues/76">#76 · prio:P2</a></div>
-      </div>
     </div>
   </section>
 

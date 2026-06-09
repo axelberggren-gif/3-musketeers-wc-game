@@ -9,7 +9,7 @@ bottom). Mounted in two places — the league home page (`app/(app)/leagues/[slu
 and the bottom of the Outcomes tab (`components/predict/OutcomesBoard.tsx`'s last zone) —
 plus tally badges on the leaderboard. Backed by `lib/league-bets/` and the
 `league_group_bets` table + `score_league_group_bets()` scorer from migration
-`0022_league_internal_bets.sql`.
+`0023_league_internal_bets.sql`.
 
 ## Key files
 - `LeagueBetsCard.tsx` — `"use client"`. One league's two bets: a crown tile + a wooden-spoon
@@ -40,8 +40,10 @@ plus tally badges on the leaderboard. Backed by `lib/league-bets/` and the
 - **Tallies are hidden until round 1 locks.** The mounting page passes `tallies = null`
   (or an empty map) before lock, so no badges/summary leak who voted for whom. RLS
   (`lgb_read_after_lock`) enforces the same server-side.
-- **Self is never a votee option.** `LeagueBetsCard` filters `selfId` out of the select;
-  the server action + RLS also reject a self-vote.
+- **Self is never a votee option.** Three aligned layers: `LeagueBetsCard` filters
+  `selfId` out of the select, the `setLeagueBet` action rejects a self-vote, and — since
+  migration `0030_lock_deletes_and_self_vote.sql` — the `lgb_write_self` RLS policy
+  enforces `votee_id <> auth.uid()` at the DB. Change one, change all three.
 - **No magic point numbers in logic** — point copy in the tiles is descriptive text;
   actual values live in `lib/scoring/rules.ts` `POINTS.leagueBet` + the SQL twins.
 
@@ -55,7 +57,14 @@ plus tally badges on the leaderboard. Backed by `lib/league-bets/` and the
   the league page shows only that league's card.
 
 ## Recent changes
+- 2026-06-09: Self-votes are now rejected at the DB, not just in the action. Migration
+  `0030_lock_deletes_and_self_vote.sql` recreates `lgb_write_self` verbatim from 0023 plus
+  `votee_id <> auth.uid()` in WITH CHECK, closing the gap (a PR #108 post-merge review
+  blocker) where a hand-crafted PostgREST write could vote for yourself — `setLeagueBet`
+  already blocked it, the policy didn't. The same migration makes the `league_group_bets`
+  round-1 lock trigger fire on DELETE too (with a privileged-role bypass so
+  `removeLeagueMember`'s service-role vote cleanup still works post-lock). No UI change.
 - 2026-06-08: initial internal-league-bets UI (crown 👑 + wooden spoon 💩). New
   `LeagueBetsCard` / `LeagueMemberSelect` / `VoteBadges`; mounted on the league page (Top-5
   badges + voting section), the leaderboard rows (badges), and a new "Internal league bets"
-  zone in `OutcomesBoard`. Backed by `lib/league-bets/` + migration `0022`.
+  zone in `OutcomesBoard`. Backed by `lib/league-bets/` + migration `0023`.

@@ -44,13 +44,22 @@ when they touch the corresponding area.
 @lib/supabase/CLAUDE.md
 @lib/scoring/CLAUDE.md
 @lib/football-data/CLAUDE.md
+@lib/sentry/CLAUDE.md
 @lib/stats/CLAUDE.md
 @supabase/migrations/CLAUDE.md
 @components/predict/CLAUDE.md
 @components/banter/CLAUDE.md
 @components/league-bets/CLAUDE.md
+@components/social/CLAUDE.md
 @components/stats/CLAUDE.md
 @analytics/CLAUDE.md
+
+**Coverage note**: directories without their own `CLAUDE.md` (`lib/predictions`,
+`lib/auth`, `lib/leagues`, `lib/banter`, `lib/admin`, `lib/profile`, `lib/players`,
+`lib/league-bets`, `lib/cron`, the loose files at the `components/` root, `scripts/`)
+are governed by this file plus the nearest area doc above (e.g. `lib/predictions/actions.ts`
+follows `components/predict/CLAUDE.md`'s server-action conventions; `lib/cron` follows
+`app/api/cron/CLAUDE.md`).
 
 ## Global invariants (do not break)
 
@@ -66,8 +75,10 @@ when they touch the corresponding area.
   numbered one (`0004_*.sql`, `0005_*.sql`, …).
 - **Cron auth**: every handler under `app/api/cron/*` MUST verify `CRON_SECRET`. See
   `app/api/cron/CLAUDE.md`.
-- **CI must pass**: `npm run lint && npm run typecheck && npm run build` are required
-  on every PR. The workflow runs them automatically; ensure they pass locally too.
+- **CI must pass**: `npm run lint && npm run typecheck && npm test && npm run build`
+  are required on every PR. The workflow runs them automatically; ensure they pass
+  locally too. The full guardrails stack (workflows, hooks, invariants) is mapped in
+  `guardrails-overview.html` — read it once if you're new here.
 - **Git identity**: never run `git config user.name` or `git config user.email`. The
   human sets those once per clone; overwriting impersonates them.
 - **AI co-author trailer**: every commit you author MUST end with the trailer
@@ -78,14 +89,18 @@ when they touch the corresponding area.
 
 ### Branches
 
-`<type>/<initials>/<short-kebab>` where `<type>` is one of: `feat`, `fix`, `chore`,
-`docs`, `refactor`, `perf`, `ci`, `revert`. Examples:
+Preferred (local sessions): `<type>/<initials>/<short-kebab>` where `<type>` is one of:
+`feat`, `fix`, `chore`, `docs`, `refactor`, `perf`, `ci`, `revert`. Examples:
 
 - `feat/ax/leaderboard-tiebreaker`
 - `fix/ma/bracket-empty-slot`
 - `docs/jo/scoring-readme`
 
 Get initials from `/.claude-identity`. Branch off `main`.
+
+Web sessions (Claude Code on the web) auto-create `claude/<word>-<word>-<id>` branches —
+that's acceptable; don't burn effort renaming them. Squash-merge means the **PR title**
+is the durable artifact on `main`, not the branch name.
 
 ### Commits
 
@@ -99,13 +114,21 @@ Get initials from `/.claude-identity`. Branch off `main`.
 Squash-merge is the only merge strategy on `main`, so the **PR title** becomes the
 commit on `main` — title must be Conventional Commits format.
 
+A local `commit-msg` hook (`.husky/commit-msg`) enforces both the Conventional Commits
+subject and the AI co-author trailer on every commit (merge/revert/fixup messages pass
+through).
+
 ### PRs
 
 1. Push your branch, open a PR against `main`.
 2. PR title = Conventional Commits (lint enforced by `pr-title-lint` workflow).
 3. Fill in the PR template (`.github/pull_request_template.md`).
 4. Update `CHANGELOG.md` in the same PR — one line at the top of the relevant
-   subsection.
+   subsection, format `- YYYY-MM-DD (#NN) description — @initials`, where `#NN` is
+   this PR's number (fill it in when you open the PR). The `changelog-guard` workflow
+   blocks PRs that touch `app/`, `components/`, `lib/` or `supabase/` without a
+   CHANGELOG entry referencing the PR number; apply the `skip-changelog` label to
+   exempt a PR that genuinely needs no entry.
 5. If you touched a directory with a `CLAUDE.md`, update its "Recent changes" list
    (newest first, keep last ~10).
 6. Wait for `ci` + `pr-title-lint` checks to be green. No reviewer approval
