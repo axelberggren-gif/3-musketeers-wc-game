@@ -75,7 +75,9 @@ export async function seedTeams() {
     // football-data API cost; best-effort like the other backfill RPCs.
     try {
       await supabase.rpc("backfill_team_fifa_rankings");
-    } catch {}
+    } catch {
+      // Best-effort: idempotent RPC, the next cron run retries.
+    }
 
     await log(supabase, "/teams", `Seeded ${teams.length} teams`, { count: teams.length });
     return { teams: teams.length };
@@ -156,20 +158,26 @@ export async function syncFixtures() {
     // Propagate group_letter from matches to teams (nothing else writes it).
     try {
       await supabase.rpc("backfill_team_group_letters");
-    } catch {}
+    } catch {
+      // Best-effort: idempotent RPC, the next cron run retries.
+    }
 
     // Self-heal teams.fifa_ranking (migration 0029) — teams seeded after
     // 0005's one-shot UPDATE block would otherwise stay NULL and dark-horse
     // scoring would pay nobody. Idempotent, zero football-data API cost.
     try {
       await supabase.rpc("backfill_team_fifa_rankings");
-    } catch {}
+    } catch {
+      // Best-effort: idempotent RPC, the next cron run retries.
+    }
 
     // Per-group / first-eliminated props are settled progressively as the
     // group stage unfolds; cheap when there's nothing new.
     try {
       await supabase.rpc("settle_group_stage_props");
-    } catch {}
+    } catch {
+      // Best-effort: idempotent RPC, the next cron run retries.
+    }
 
     // Drain per-match detail fetches for FINISHED matches that haven't been
     // synced yet. Capped per run to stay under the 10 req/min free-tier cap
@@ -178,7 +186,9 @@ export async function syncFixtures() {
 
     try {
       await supabase.rpc("refresh_league_standings");
-    } catch {}
+    } catch {
+      // Best-effort: idempotent RPC, the next cron run retries.
+    }
 
     await log(supabase, "/matches", `Synced ${inserted} matches, scored ${scored} picks`, {
       inserted,
@@ -220,7 +230,9 @@ export async function syncScorers() {
     if (typeof data === "number") scored = data;
     try {
       await supabase.rpc("refresh_league_standings");
-    } catch {}
+    } catch {
+      // Best-effort: idempotent RPC, the next cron run retries.
+    }
 
     await log(
       supabase,

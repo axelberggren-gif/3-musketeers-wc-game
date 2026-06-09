@@ -89,6 +89,22 @@ jobs:
                  test on the TS caller or an explicit justification.
                - Pure UI / styling / copy / docs PRs are exempt.
 
+            4. **Leftover scaffolding**: `TEMP`/smoke-test/debug-only code,
+               commented-out blocks left enabled, unreachable code after a
+               `throw`/`return`.
+
+            5. **Timezone correctness**: `datetime-local` values written to
+               the DB without explicit UTC conversion; locale/TZ-sensitive
+               formatting (`Intl`, `toDateString`, `toLocaleString`) executed
+               during SSR without the repo's deferred post-mount-swap pattern.
+
+            6. **Canon accuracy**: any `CLAUDE.md` edited in the diff must
+               match the code in the same diff (file names, migration numbers,
+               behavioral claims) — verify, don't trust.
+
+            7. **Point-value copy**: hardcoded point numbers in UI copy must
+               equal the `POINTS` values in `lib/scoring/rules.ts`.
+
             ## Do NOT block on
 
             - Naming preferences, comment density, micro-refactors.

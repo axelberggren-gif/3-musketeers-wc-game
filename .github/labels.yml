@@ -51,6 +51,9 @@
   description: "Nice to have."
 
 # Meta.
+- name: "skip-changelog"
+  color: "ededed"
+  description: "Exempt this PR from the changelog-guard check (no CHANGELOG.md entry required)."
 - name: "status:blocked"
   color: "5319e7"
   description: "Waiting on something or someone. Use sparingly; prefer the Project column for status."

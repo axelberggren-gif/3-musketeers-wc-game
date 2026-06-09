@@ -1,0 +1,64 @@
+name: changelog-guard
+
+# Machine-enforces the AGENTS.md rule "Update CHANGELOG.md in the same PR".
+# Convention-only rules drift (the guardrails audit found CHANGELOG discipline
+# among the worst offenders while machine-enforced rules held at ~100%), so
+# this turns the convention into a check: any PR touching runtime code (app/,
+# components/, lib/, supabase/) must also modify CHANGELOG.md, and the added
+# CHANGELOG lines must reference the PR number (#<n>). Apply the
+# `skip-changelog` label (.github/labels.yml) to exempt a PR — the labeled /
+# unlabeled triggers re-run the check when the label changes.
+#
+# Checkout-free: reads the PR's labels, file list, and CHANGELOG patch via the
+# GitHub API, so no actions/checkout is needed.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require a CHANGELOG entry that mentions this PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          # Label escape hatch.
+          if gh pr view "$PR_NUMBER" --json labels --jq '.labels[].name' \
+            | grep -qx "skip-changelog"; then
+            echo "skip-changelog label present — skipping the changelog guard."
+            exit 0
+          fi
+
+          # Changed files (--paginate covers PRs with >100 files).
+          files=$(gh api "repos/${GH_REPO}/pulls/${PR_NUMBER}/files" --paginate --jq '.[].filename')
+
+          touches_runtime=$(printf '%s\n' "$files" | grep -cE '^(app|components|lib|supabase)/' || true)
+          touches_changelog=$(printf '%s\n' "$files" | grep -cx 'CHANGELOG.md' || true)
+
+          if [ "$touches_runtime" -gt 0 ] && [ "$touches_changelog" -eq 0 ]; then
+            echo "::error::This PR changes files under app/, components/, lib/ or supabase/ but does not update CHANGELOG.md. Add an entry (one line at the top of the relevant subsection — see AGENTS.md) or apply the skip-changelog label."
+            exit 1
+          fi
+
+          if [ "$touches_changelog" -gt 0 ]; then
+            # Added lines of the CHANGELOG.md patch must mention this PR.
+            added=$(gh api "repos/${GH_REPO}/pulls/${PR_NUMBER}/files" --paginate \
+              --jq '.[] | select(.filename == "CHANGELOG.md") | .patch // ""' \
+              | grep '^+' | grep -v '^+++' || true)
+            # Word-bounded so e.g. #12 does not match inside #123.
+            if ! printf '%s\n' "$added" | grep -qE "#${PR_NUMBER}"'([^0-9]|$)'; then
+              echo "::error::CHANGELOG.md was modified, but none of the added lines mention this PR (#${PR_NUMBER}). Reference the PR number in the new entry, or apply the skip-changelog label."
+              exit 1
+            fi
+          fi
+
+          echo "changelog-guard passed."

@@ -1,0 +1,41 @@
+# Commit-message gate (POSIX sh, no deps; husky passes the message file as $1).
+# Enforces two AGENTS.md rules that drift when left to convention:
+#   1. Conventional Commits subject (pr-title-lint only covers the squash-merge
+#      PR title, not the commits behind it).
+#   2. The AI co-author trailer on every commit ("Co-authored-by: ..."), which
+#      makes AI-assisted commits queryable.
+# Git-generated subjects (merges, reverts, autosquash fixups) pass through.
+
+msg_file="$1"
+
+# First non-comment line is the subject.
+subject=$(grep -v '^#' "$msg_file" | head -n 1)
+
+case "$subject" in
+  "Merge "* | "Revert "* | "fixup! "* | "squash! "*)
+    exit 0
+    ;;
+esac
+
+fail=0
+
+if ! printf '%s\n' "$subject" | grep -Eq '^(feat|fix|chore|docs|refactor|perf|ci|revert|style)(\([^)]+\))?!?: [a-z]'; then
+  echo "commit-msg: subject line is not Conventional Commits format." >&2
+  echo "" >&2
+  echo "  yours:    $subject" >&2
+  echo "  expected: <type>[(scope)][!]: <subject starting lowercase>" >&2
+  echo "  types:    feat|fix|chore|docs|refactor|perf|ci|revert|style" >&2
+  echo "  example:  feat(scoring): add tiebreaker on away-pick accuracy" >&2
+  fail=1
+fi
+
+if ! grep -v '^#' "$msg_file" | grep -Eqi '^co-authored-by:'; then
+  echo "commit-msg: missing the AI co-author trailer (AGENTS.md requires it on every commit)." >&2
+  echo "" >&2
+  echo "  end the commit message body with:" >&2
+  echo "  Co-authored-by: Claude <noreply@anthropic.com>" >&2
+  echo "  (or the matching trailer for your agent)" >&2
+  fail=1
+fi
+
+exit $fail
