@@ -56,10 +56,22 @@ export function MatchPickCard({ match, initialPick, locked }: Props) {
     setPick(next);
     setError(null);
     startTransition(async () => {
-      const result = await setMatchPick(match.id, next);
-      if (!result.ok) {
+      try {
+        const result = await setMatchPick(match.id, next);
+        if (!result.ok) {
+          setPick(previous);
+          setError(result.error);
+        }
+      } catch {
+        // Network blip mid-server-action (Chrome surfaces this as
+        // "TypeError: Failed to fetch" or the Next.js framework error
+        // "An unexpected response was received from the server."). Roll
+        // back the optimistic pick and surface a retry-friendly message
+        // instead of letting the uncaught rejection bubble to Sentry's
+        // window.unhandledrejection auto-capture. Mirrors LoginForm /
+        // WelcomeForm (Sentry JAVASCRIPT-NEXTJS-A / -B).
         setPick(previous);
-        setError(result.error);
+        setError("Couldn’t reach the server. Check your connection and try again.");
       }
     });
   }
