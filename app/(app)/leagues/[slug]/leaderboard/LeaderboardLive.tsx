@@ -21,19 +21,28 @@ export function LeaderboardLive({ leagueId, initialRows, currentUserId, tallies 
 
   useEffect(() => {
     const supabase = supabaseBrowser();
+    // Member-gated accessor (migration 0027) — direct SELECT on the
+    // league_standings matview is revoked for authenticated users.
+    const refetch = async () => {
+      const { data } = await supabase
+        .rpc("get_league_standings", { p_league_id: leagueId })
+        .order("total_points", { ascending: false });
+      if (data) setRows(data as LeagueStandingsRow[]);
+    };
     const channel = supabase
       .channel(`league:${leagueId}:awards`)
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "point_awards" },
-        async () => {
-          const { data } = await supabase
-            .from("league_standings")
-            .select("*")
-            .eq("league_id", leagueId)
-            .order("total_points", { ascending: false });
-          if (data) setRows(data as LeagueStandingsRow[]);
-        },
+        refetch,
+      )
+      // Reconcile scorers (migrations 0014+) also DELETE stale awards when a
+      // result is corrected — refetch on those too, or the board would keep
+      // showing revoked points until the next INSERT.
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "point_awards" },
+        refetch,
       )
       .subscribe();
     return () => {

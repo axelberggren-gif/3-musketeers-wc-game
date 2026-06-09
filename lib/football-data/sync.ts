@@ -68,6 +68,15 @@ export async function seedTeams() {
         );
       }
     }
+    // Seed fifa_ranking for the freshly-upserted teams (migration 0029). The
+    // football-data payload has no ranks and 0005's one-shot UPDATE block ran
+    // before any team rows existed on a fresh deploy, so without this the
+    // column stays NULL and dark-horse scoring pays nobody. Idempotent, no
+    // football-data API cost; best-effort like the other backfill RPCs.
+    try {
+      await supabase.rpc("backfill_team_fifa_rankings");
+    } catch {}
+
     await log(supabase, "/teams", `Seeded ${teams.length} teams`, { count: teams.length });
     return { teams: teams.length };
   } catch (e) {
@@ -147,6 +156,13 @@ export async function syncFixtures() {
     // Propagate group_letter from matches to teams (nothing else writes it).
     try {
       await supabase.rpc("backfill_team_group_letters");
+    } catch {}
+
+    // Self-heal teams.fifa_ranking (migration 0029) — teams seeded after
+    // 0005's one-shot UPDATE block would otherwise stay NULL and dark-horse
+    // scoring would pay nobody. Idempotent, zero football-data API cost.
+    try {
+      await supabase.rpc("backfill_team_fifa_rankings");
     } catch {}
 
     // Per-group / first-eliminated props are settled progressively as the

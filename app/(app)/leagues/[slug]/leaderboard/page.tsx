@@ -24,10 +24,10 @@ export default async function LeaderboardPage({
   if (!league) notFound();
 
   const [rowsRes, tournamentRes, betsRes] = await Promise.all([
+    // Member-gated accessor (migration 0027) — direct SELECT on the
+    // league_standings matview is revoked for authenticated users.
     supabase
-      .from("league_standings")
-      .select("*")
-      .eq("league_id", league.id)
+      .rpc("get_league_standings", { p_league_id: league.id })
       .order("total_points", { ascending: false }),
     supabase.from("tournament").select("*").single(),
     supabase.from("league_group_bets").select("bet_kind, votee_id").eq("league_id", league.id),
