@@ -44,10 +44,12 @@ when they touch the corresponding area.
 @lib/supabase/CLAUDE.md
 @lib/scoring/CLAUDE.md
 @lib/football-data/CLAUDE.md
+@lib/stats/CLAUDE.md
 @supabase/migrations/CLAUDE.md
 @components/predict/CLAUDE.md
 @components/banter/CLAUDE.md
 @components/league-bets/CLAUDE.md
+@components/stats/CLAUDE.md
 @analytics/CLAUDE.md
 
 ## Global invariants (do not break)
