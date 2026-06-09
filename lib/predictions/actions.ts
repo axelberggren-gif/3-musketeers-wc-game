@@ -83,8 +83,11 @@ export async function setTournamentPick(values: {
 }
 
 export async function setTotalGoalsGuess(value: number | null) {
-  if (value != null && (!Number.isInteger(value) || value < 0 || value > 300)) {
-    return { ok: false, error: "Pick an integer between 0 and 300." } as const;
+  // No upper bound (migration 0025) — WC 2026's 104 matches can plausibly clear
+  // the old 0..300 cap. Closest-guess scoring means a wild value just loses, so
+  // we only enforce a non-negative integer floor.
+  if (value != null && (!Number.isInteger(value) || value < 0)) {
+    return { ok: false, error: "Pick an integer of 0 or more." } as const;
   }
   return setTournamentPick({ total_goals_guess: value });
 }

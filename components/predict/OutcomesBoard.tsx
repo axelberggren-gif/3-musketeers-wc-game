@@ -307,7 +307,6 @@ export function OutcomesBoard({
             <NumberInput
               initial={initial.total_goals_guess}
               min={0}
-              max={300}
               disabled={locked}
               onSave={trackNum("total_goals", setTotalGoalsGuess)}
             />

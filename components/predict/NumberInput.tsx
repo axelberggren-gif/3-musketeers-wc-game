@@ -6,7 +6,8 @@ interface Props {
   label?: string;
   initial: number | null;
   min: number;
-  max: number;
+  /** Optional upper bound. Omit for an unbounded input (only `min` is enforced). */
+  max?: number;
   disabled: boolean;
   onSave: (value: number | null) => Promise<{ ok: boolean; error?: string }>;
 }
@@ -19,8 +20,12 @@ export function NumberInput({ label, initial, min, max, disabled, onSave }: Prop
   function commit(raw: string) {
     const trimmed = raw.trim();
     const next = trimmed === "" ? null : Number(trimmed);
-    if (next != null && (!Number.isInteger(next) || next < min || next > max)) {
-      setError(`Pick an integer between ${min} and ${max}.`);
+    if (next != null && (!Number.isInteger(next) || next < min || (max != null && next > max))) {
+      setError(
+        max != null
+          ? `Pick an integer between ${min} and ${max}.`
+          : `Pick an integer of ${min} or more.`,
+      );
       return;
     }
     const previous = value;
@@ -47,7 +52,7 @@ export function NumberInput({ label, initial, min, max, disabled, onSave }: Prop
         onChange={(e) => setValue(e.target.value)}
         onBlur={(e) => commit(e.target.value)}
         className="input"
-        placeholder={`${min}–${max}`}
+        placeholder={max != null ? `${min}–${max}` : `${min}+`}
       />
       {error && <p className="text-xs text-[var(--danger)]">{error}</p>}
     </div>
