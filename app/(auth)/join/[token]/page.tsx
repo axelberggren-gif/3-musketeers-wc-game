@@ -94,13 +94,6 @@ export default async function JoinPage({
                 : "You’ve been invited to a private league. Sign in to accept and start picking."}
             </p>
           </div>
-          <div
-            className="rounded-lg border-2 border-ink bg-paper-2 px-3 py-2 font-mono-sticker text-xs flex items-center justify-between gap-2"
-            style={{ boxShadow: "3px 3px 0 var(--ink)" }}
-          >
-            <span className="truncate">kickoff.app/j/{token.slice(0, 12)}</span>
-            <span className="badge badge-gold !py-0 !text-[10px]">Invite</span>
-          </div>
           {joinError ? (
             <div className="flex flex-col gap-2">
               <Link href="/leagues" className="btn btn-secondary self-start">
