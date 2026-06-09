@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { supabaseServer } from "@/lib/supabase/server";
 import { SignOutButton } from "./SignOutButton";
+import { NavTabs, type NavTab } from "./NavTabs";
 
 export async function Nav() {
   const supabase = await supabaseServer();
@@ -15,6 +16,14 @@ export async function Nav() {
     .eq("id", user.id)
     .single();
 
+  const tabs: NavTab[] = [
+    { href: "/predict", label: "Group stage", exact: true },
+    { href: "/predict/outcomes", label: "Outcomes" },
+    { href: "/predict/bracket", label: "Bracket" },
+    { href: "/leagues", label: "Leagues" },
+    ...(profile?.is_admin ? [{ href: "/admin", label: "Admin" }] : []),
+  ];
+
   return (
     <nav className="sticky top-0 z-20 border-b-2 border-ink bg-paper/95 backdrop-blur">
       <div className="max-w-6xl mx-auto px-3 sm:px-5 py-3 flex items-center gap-2 sm:gap-3">
@@ -26,13 +35,7 @@ export async function Nav() {
           <span>⚽ KICKOFF</span>
           <span className="text-pitch-light text-[0.65em]">&apos;26</span>
         </Link>
-        <div className="flex gap-1 sm:gap-1.5 overflow-x-auto -mx-1 px-1">
-          <NavLink href="/predict">Group stage</NavLink>
-          <NavLink href="/predict/outcomes">Outcomes</NavLink>
-          <NavLink href="/predict/bracket">Bracket</NavLink>
-          <NavLink href="/leagues">Leagues</NavLink>
-          {profile?.is_admin && <NavLink href="/admin">Admin</NavLink>}
-        </div>
+        <NavTabs tabs={tabs} />
         <div className="ml-auto flex items-center gap-2">
           <Link
             href={profile ? `/profile/${profile.username}` : "/"}
@@ -53,16 +56,5 @@ export async function Nav() {
         </div>
       </div>
     </nav>
-  );
-}
-
-function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
-  return (
-    <Link
-      href={href}
-      className="font-display text-[11px] sm:text-xs uppercase tracking-wider px-3 py-1.5 rounded-full border-2 border-transparent text-ink hover:bg-gold hover:border-ink hover:[box-shadow:3px_3px_0_var(--ink)] whitespace-nowrap"
-    >
-      {children}
-    </Link>
   );
 }
