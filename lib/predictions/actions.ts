@@ -171,16 +171,27 @@ export async function setSwedishPlayersGuess(value: number | null) {
   return setTournamentPick({ swedish_players_guess: value });
 }
 
-export async function setPlayerProp(propKey: string, playerId: string) {
+export async function setPlayerProp(propKey: string, playerId: string | null) {
   const { supabase, user } = await authedClient();
   const locks = await getLocks();
   if (locks.round1Locked) return { ok: false, error: "Round 1 picks are locked." } as const;
-  const { error } = await supabase
-    .from("player_prop_predictions")
-    .upsert({ user_id: user.id, prop_key: propKey, player_id: playerId }, {
-      onConflict: "user_id,prop_key",
-    });
-  if (error) return { ok: false, error: error.message } as const;
+  if (playerId == null) {
+    // "Clear selection" removes the pick — delete the row so UI and DB agree
+    // (mirrors setMatchPick).
+    const { error } = await supabase
+      .from("player_prop_predictions")
+      .delete()
+      .eq("user_id", user.id)
+      .eq("prop_key", propKey);
+    if (error) return { ok: false, error: error.message } as const;
+  } else {
+    const { error } = await supabase
+      .from("player_prop_predictions")
+      .upsert({ user_id: user.id, prop_key: propKey, player_id: playerId }, {
+        onConflict: "user_id,prop_key",
+      });
+    if (error) return { ok: false, error: error.message } as const;
+  }
   revalidatePath("/predict");
   return { ok: true } as const;
 }

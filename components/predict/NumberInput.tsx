@@ -14,6 +14,11 @@ interface Props {
 
 export function NumberInput({ label, initial, min, max, disabled, onSave }: Props) {
   const [value, setValue] = useState<string>(initial != null ? String(initial) : "");
+  // The input is controlled, so by the time commit() fires on blur `value` is
+  // already the freshly-typed text — capturing it as the rollback target would
+  // "restore" the rejected value. Roll back to the last server-accepted value
+  // instead.
+  const [lastSaved, setLastSaved] = useState<string>(initial != null ? String(initial) : "");
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -28,13 +33,14 @@ export function NumberInput({ label, initial, min, max, disabled, onSave }: Prop
       );
       return;
     }
-    const previous = value;
     setError(null);
     startTransition(async () => {
       const result = await onSave(next);
       if (!result.ok) {
-        setValue(previous);
+        setValue(lastSaved);
         setError(result.error ?? "Failed to save");
+      } else {
+        setLastSaved(next != null ? String(next) : "");
       }
     });
   }

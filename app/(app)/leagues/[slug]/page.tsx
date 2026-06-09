@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { supabaseServer } from "@/lib/supabase/server";
 import { CountryFlag } from "@/components/CountryFlag";
-import { isoToLocal } from "@/lib/utils";
+import { LocalKickoff } from "@/components/LocalKickoff";
 import { BanterFeed } from "@/components/banter/BanterFeed";
 import { computeLockState } from "@/lib/scoring/lock";
 import { LeagueBetsCard } from "@/components/league-bets/LeagueBetsCard";
@@ -319,9 +319,11 @@ function MatchRow({ match, showScore }: { match: MatchRowData; showScore?: boole
           />
         </div>
       </Link>
-      <span className="font-mono-sticker text-[10px] text-ink-soft w-20 text-right uppercase tracking-widest">
-        {isoToLocal(match.kickoff_at, { weekday: undefined, year: undefined })}
-      </span>
+      <LocalKickoff
+        iso={match.kickoff_at}
+        options={{ weekday: undefined, year: undefined }}
+        className="font-mono-sticker text-[10px] text-ink-soft w-20 text-right uppercase tracking-widest"
+      />
     </li>
   );
 }

@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import * as Sentry from "@sentry/nextjs";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { seedTeams, syncFixtures, syncScorers } from "@/lib/football-data/sync";
 import { FootballDataClient } from "@/lib/football-data/client";
@@ -21,6 +20,26 @@ async function assertAdmin() {
     .single();
   if (!profile?.is_admin) throw new Error("Forbidden — admins only");
   return user;
+}
+
+// Run a scoring/refresh RPC whose failure should not fail the calling action
+// (the result write already succeeded and the 10-min cron re-runs the same
+// idempotent RPCs, so scoring self-heals) — but the failure MUST reach Sentry
+// instead of being swallowed. supabase-js returns SQL errors in `error` rather
+// than throwing, so both paths are captured.
+async function captureRpcFailure(
+  action: string,
+  rpc: string,
+  run: () => PromiseLike<{ error: { message: string } | null }>,
+) {
+  try {
+    const { error } = await run();
+    if (error) {
+      await captureServerActionError(new Error(`${rpc} failed: ${error.message}`), action, { rpc });
+    }
+  } catch (e) {
+    await captureServerActionError(e, action, { rpc });
+  }
 }
 
 export async function runSeedTeams() {
@@ -58,14 +77,7 @@ export async function runSyncScorers() {
 
 export async function runCheckToken() {
   await assertAdmin();
-  // TEMP Sentry diagnostic — remove once capture is verified.
-  const dsnSeen = Boolean(process.env.NEXT_PUBLIC_SENTRY_DSN);
-  const clientReady = Boolean(Sentry.getClient());
-  const runtime = process.env.NEXT_RUNTIME ?? "unknown";
-  const vercelEnv = process.env.VERCEL_ENV ?? "local";
-  const diag = `dsn=${dsnSeen} client=${clientReady} runtime=${runtime} env=${vercelEnv}`;
   try {
-    throw new Error(`sentry-smoke-test [${diag}]`);
     const { teams } = await new FootballDataClient().teams();
     return {
       ok: true,
@@ -106,16 +118,26 @@ export async function overrideMatchResult(formData: FormData) {
     .eq("id", matchId);
   if (error) return { ok: false, error: error.message } as const;
 
-  await service.rpc("score_match", { p_match_id: matchId });
-  try {
-    await service.rpc("score_bracket");
-  } catch {}
-  try {
-    await service.rpc("score_tournament");
-  } catch {}
-  try {
-    await service.rpc("refresh_league_standings");
-  } catch {}
+  // Re-run scoring in the same order as syncFixtures(): score_match →
+  // score_bracket → score_tournament → settle_group_stage_props →
+  // refresh_league_standings. settle_group_stage_props matters here — a
+  // corrected group-stage result must re-settle the first-eliminated /
+  // league-bet props immediately, not on the next cron run.
+  await captureRpcFailure("overrideMatchResult", "score_match", () =>
+    service.rpc("score_match", { p_match_id: matchId }),
+  );
+  await captureRpcFailure("overrideMatchResult", "score_bracket", () =>
+    service.rpc("score_bracket"),
+  );
+  await captureRpcFailure("overrideMatchResult", "score_tournament", () =>
+    service.rpc("score_tournament"),
+  );
+  await captureRpcFailure("overrideMatchResult", "settle_group_stage_props", () =>
+    service.rpc("settle_group_stage_props"),
+  );
+  await captureRpcFailure("overrideMatchResult", "refresh_league_standings", () =>
+    service.rpc("refresh_league_standings"),
+  );
   revalidatePath("/admin");
   revalidatePath(`/admin/matches/${matchId}`);
   return { ok: true } as const;
@@ -123,9 +145,22 @@ export async function overrideMatchResult(formData: FormData) {
 
 export async function setTournamentDates(formData: FormData) {
   await assertAdmin();
-  const first = String(formData.get("first_kickoff_at"));
-  const ko = String(formData.get("knockout_start_at"));
-  const final = String(formData.get("final_at"));
+  // Expect full ISO datetimes (the form converts datetime-local values to UTC
+  // ISO before submitting). Validate + normalize via toISOString so an
+  // unparseable value can never reach Postgres and a TZ-less stray is at
+  // least stored deterministically rather than corrupting the round locks.
+  const parseIso = (name: string): string | null => {
+    const raw = String(formData.get(name) ?? "").trim();
+    if (!raw) return null;
+    const parsed = new Date(raw);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+  };
+  const first = parseIso("first_kickoff_at");
+  const ko = parseIso("knockout_start_at");
+  const final = parseIso("final_at");
+  if (!first || !ko || !final) {
+    return { ok: false, error: "All three dates must be valid datetimes." } as const;
+  }
   const service = supabaseService();
   const { error } = await service
     .from("tournament")
@@ -153,12 +188,27 @@ export async function setManualPropResolutions(formData: FormData) {
     const v = str(name);
     return v === "yes" ? true : v === "no" ? false : null;
   };
-  const int = (name: string): number | null => {
+  // Blank = "clear the resolution" (legit unresolve, revokes awards). A
+  // NON-blank but unparseable/out-of-range value must NOT silently map to
+  // null — that would delete the resolution with no warning — so it's a
+  // validation error instead.
+  const int = (
+    name: string,
+    label: string,
+  ): { ok: true; value: number | null } | { ok: false; error: string } => {
     const v = str(name);
-    if (v == null) return null;
+    if (v == null) return { ok: true, value: null };
     const n = Number(v);
-    return Number.isInteger(n) && n >= 0 && n <= 50 ? n : null;
+    if (!Number.isInteger(n) || n < 0 || n > 50) {
+      return { ok: false, error: `${label} must be a whole number between 0 and 50.` };
+    }
+    return { ok: true, value: n };
   };
+
+  const ownGoals = int("own_goals", "Own goals");
+  if (!ownGoals.ok) return { ok: false, error: ownGoals.error } as const;
+  const swedishPlayers = int("swedish_players", "Swedish players");
+  if (!swedishPlayers.ok) return { ok: false, error: swedishPlayers.error } as const;
 
   // prop_key → its single answer column + the parsed value (null = clear the prop).
   const resolutions: {
@@ -170,9 +220,9 @@ export async function setManualPropResolutions(formData: FormData) {
     { propKey: "streaker", column: "answer_bool", value: bool("streaker") },
     { propKey: "best_goalkeeper", column: "answer_player_id", value: str("best_goalkeeper_player_id") },
     { propKey: "golden_boot_team", column: "answer_team_id", value: str("golden_boot_team_id") },
-    { propKey: "own_goals", column: "answer_int", value: int("own_goals") },
+    { propKey: "own_goals", column: "answer_int", value: ownGoals.value },
     { propKey: "war_game", column: "answer_match_id", value: str("war_game_match_id") },
-    { propKey: "swedish_players", column: "answer_int", value: int("swedish_players") },
+    { propKey: "swedish_players", column: "answer_int", value: swedishPlayers.value },
   ];
 
   for (const r of resolutions) {
@@ -201,10 +251,12 @@ export async function setManualPropResolutions(formData: FormData) {
     if (error) return { ok: false, error: error.message } as const;
   }
 
-  await service.rpc("score_manual_props");
-  try {
-    await service.rpc("refresh_league_standings");
-  } catch {}
+  await captureRpcFailure("setManualPropResolutions", "score_manual_props", () =>
+    service.rpc("score_manual_props"),
+  );
+  await captureRpcFailure("setManualPropResolutions", "refresh_league_standings", () =>
+    service.rpc("refresh_league_standings"),
+  );
   revalidatePath("/admin/props");
   revalidatePath("/predict/outcomes");
   return { ok: true } as const;

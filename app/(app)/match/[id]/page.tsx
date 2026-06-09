@@ -6,7 +6,7 @@ import { PickReactionStrip } from "@/components/social/PickReactionStrip";
 import { matchIsLocked } from "@/lib/scoring/lock";
 import { loadPickReactions } from "@/lib/predictions/reactions";
 import { aggregateKey } from "@/lib/predictions/reactions-shared";
-import { isoToLocal } from "@/lib/utils";
+import { LocalKickoff } from "@/components/LocalKickoff";
 import type { Pick1X2 } from "@/lib/supabase/types";
 
 type MatchTeamRel = { id: string; name: string; code: string; crest_url: string | null };
@@ -90,9 +90,10 @@ export default async function MatchPage({
           <span className="badge">
             {match.group_letter ? `Group ${match.group_letter}` : match.stage}
           </span>
-          <span className="font-mono-sticker text-[11px] uppercase tracking-widest text-ink-soft">
-            {isoToLocal(match.kickoff_at)}
-          </span>
+          <LocalKickoff
+            iso={match.kickoff_at}
+            className="font-mono-sticker text-[11px] uppercase tracking-widest text-ink-soft"
+          />
           {live ? (
             <span className="badge badge-red">● LIVE</span>
           ) : finished ? (
