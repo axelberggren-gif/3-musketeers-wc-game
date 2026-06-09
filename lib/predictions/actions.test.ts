@@ -42,6 +42,7 @@ import {
   setBiggestWinMarginGuess,
   setGoldenBootGoalsGuess,
   setTotalRedCardsGuess,
+  setTotalGoalsGuess,
 } from "./actions";
 
 beforeEach(() => {
@@ -110,6 +111,45 @@ describe.each(cases)("$name (range 0..$max)", ({ fn, max, column }) => {
       ok: false,
       error: `Pick an integer between 0 and ${max}.`,
     });
+    expect(upsert).not.toHaveBeenCalled();
+  });
+});
+
+// setTotalGoalsGuess has NO upper bound (migration 0025) — only a non-negative
+// integer floor. WC 2026's 104 matches can plausibly exceed the old 0..300 cap,
+// and closest-guess scoring means an unbounded value can never inflate points.
+describe("setTotalGoalsGuess (range 0..∞)", () => {
+  it("passes a valid value through to the upsert", async () => {
+    const result = await setTotalGoalsGuess(280);
+
+    expect(result).toEqual({ ok: true });
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ user_id: "user-1", total_goals_guess: 280 }),
+      { onConflict: "user_id" },
+    );
+  });
+
+  it("accepts a value above the old 300 cap", async () => {
+    const result = await setTotalGoalsGuess(9999);
+
+    expect(result).toEqual({ ok: true });
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ total_goals_guess: 9999 }),
+      { onConflict: "user_id" },
+    );
+  });
+
+  it("rejects a negative value without writing to the DB", async () => {
+    const result = await setTotalGoalsGuess(-1);
+
+    expect(result).toEqual({ ok: false, error: "Pick an integer of 0 or more." });
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it("rejects a non-integer value without writing to the DB", async () => {
+    const result = await setTotalGoalsGuess(1.5);
+
+    expect(result).toEqual({ ok: false, error: "Pick an integer of 0 or more." });
     expect(upsert).not.toHaveBeenCalled();
   });
 });
