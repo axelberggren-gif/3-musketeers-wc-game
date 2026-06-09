@@ -1,10 +1,3 @@
-import { type ClassValue, clsx } from "clsx";
-import { twMerge } from "tailwind-merge";
-
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
-
 export function isoToLocal(iso: string | Date, opts?: Intl.DateTimeFormatOptions) {
   const date = typeof iso === "string" ? new Date(iso) : iso;
   return new Intl.DateTimeFormat("en-GB", {

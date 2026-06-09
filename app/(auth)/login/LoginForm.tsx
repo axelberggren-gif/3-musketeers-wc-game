@@ -18,29 +18,47 @@ export function LoginForm({
     e.preventDefault();
     setPending(true);
     setError(null);
-    const result = await signInWithEmail(email, inviteToken);
-    setPending(false);
-    if (!result.ok) {
-      setError(result.error);
-      return;
+    try {
+      const result = await signInWithEmail(email, inviteToken);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setCode("");
+      setPhase("code");
+    } catch {
+      // Network blip mid-server-action (Chrome surfaces this as
+      // "TypeError: Failed to fetch", Safari as "Load failed"). Surface a
+      // retry-friendly message instead of letting the uncaught rejection
+      // bubble to Sentry's window.unhandledrejection auto-capture — and make
+      // sure the button doesn't stay stuck on "Sending…". Mirrors WelcomeForm.
+      setError("Couldn’t reach the server. Check your connection and try again.");
+    } finally {
+      setPending(false);
     }
-    setCode("");
-    setPhase("code");
   }
 
   async function handleVerify(e: React.FormEvent) {
     e.preventDefault();
     setPending(true);
     setError(null);
-    const result = await verifyEmailOtp(email, code, inviteToken);
-    if (!result.ok) {
-      setError(result.error);
+    try {
+      const result = await verifyEmailOtp(email, code, inviteToken);
+      if (!result.ok) {
+        setError(result.error);
+        setPending(false);
+        return;
+      }
+      // Full navigation so the session cookies just set by the server action are
+      // sent on the next request (the auth gate in (app)/layout.tsx reads them).
+      // Pending intentionally stays true so the button reads "Verifying…" until
+      // the page actually navigates away.
+      window.location.assign(result.redirectTo);
+    } catch {
+      // Same network-blip handling as handleSendCode (mirrors WelcomeForm).
+      setError("Couldn’t reach the server. Check your connection and try again.");
       setPending(false);
-      return;
     }
-    // Full navigation so the session cookies just set by the server action are
-    // sent on the next request (the auth gate in (app)/layout.tsx reads them).
-    window.location.assign(result.redirectTo);
   }
 
   if (phase === "code") {

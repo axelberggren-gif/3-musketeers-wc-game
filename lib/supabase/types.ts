@@ -1035,6 +1035,10 @@ export type Database = {
       };
     };
     Functions: {
+      backfill_team_fifa_rankings: {
+        Args: Record<PropertyKey, never>;
+        Returns: undefined;
+      };
       backfill_team_group_letters: {
         Args: Record<PropertyKey, never>;
         Returns: number;
@@ -1046,6 +1050,20 @@ export type Database = {
       debug_auth_uid: {
         Args: Record<PropertyKey, never>;
         Returns: string;
+      };
+      get_league_standings: {
+        Args: { p_league_id: string };
+        Returns: {
+          league_id: string | null;
+          user_id: string | null;
+          username: string | null;
+          display_name: string | null;
+          match_points: number | null;
+          bracket_points: number | null;
+          tournament_points: number | null;
+          prop_points: number | null;
+          total_points: number | null;
+        }[];
       };
       is_league_member: {
         Args: { p_league_id: string; p_user_id: string };

@@ -1,0 +1,58 @@
+name: review-followup
+
+# Post-merge blocker safety net. The review gate (claude-review) can lose a race
+# to the merge: an admin merge (or auto-merge landing on an earlier approval)
+# can put the PR on main while the bot is still reviewing, so a
+# CHANGES_REQUESTED verdict posts AFTER the merge and gates nothing — the
+# blockers silently vanish. This happened twice in repo history (PRs #61 and
+# #108; #108's blockers were never fixed). When a changes-requested review
+# arrives on an already-merged PR, this workflow files a prio:P1 issue carrying
+# the review so the verdict can't disappear.
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  issues: write
+  pull-requests: read
+
+jobs:
+  file-issue:
+    if: |
+      github.event.review.state == 'changes_requested' &&
+      github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: File post-merge blocker issue (skip if one already exists)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REVIEW_URL: ${{ github.event.review.html_url }}
+          # Passed via env — never interpolated into the script — so markdown,
+          # quotes, or backticks in the review body can't inject shell.
+          REVIEW_BODY: ${{ github.event.review.body }}
+        run: |
+          title="Post-merge blockers from PR #${PR_NUMBER} review"
+
+          # Dedupe (mirrors the upsert pattern in agent-analytics.yml): search
+          # is fuzzy (and strips the `#`), so search on the stable prefix and
+          # filter to the exact title with jq before deciding.
+          existing=$(gh issue list --state open --search "Post-merge blockers from PR in:title" \
+            --json number,title --jq "map(select(.title == \"$title\")) | .[0].number // empty")
+          if [ -n "$existing" ]; then
+            echo "Issue #$existing already tracks post-merge blockers for PR #${PR_NUMBER} — skipping."
+            exit 0
+          fi
+
+          {
+            printf '%s\n\n' "A **CHANGES_REQUESTED** review landed on PR #${PR_NUMBER} *after* it was merged — the review gate lost the race to the merge, so nothing forced these blockers to be addressed. Triage each one below; fix or explicitly dismiss."
+            printf 'Review: %s\n\n' "$REVIEW_URL"
+            printf '%s\n' "$REVIEW_BODY" | sed 's/^/> /'
+            printf '\n%s\n' "Refs: #${PR_NUMBER}"
+          } > /tmp/issue-body.md
+
+          gh issue create --title "$title" --body-file /tmp/issue-body.md \
+            --label "prio:P1" --label "type:bug"
+          echo "Filed follow-up issue for PR #${PR_NUMBER}."

@@ -141,11 +141,11 @@ export function OutcomesBoard({
       return res;
     };
   }
-  // Player props no-op on clear (parity with the old TournamentForm), but the
-  // meter still reflects the optimistic UI state.
+  // Clearing a player prop deletes the row server-side (setPlayerProp(null))
+  // so the pick doesn't reappear on reload; the meter bit follows the save.
   function trackProp(key: string) {
     return async (id: string | null) => {
-      const res = id ? await setPlayerProp(key, id) : ({ ok: true } as SaveResult);
+      const res: SaveResult = await setPlayerProp(key, id);
       if (res.ok) setFilled((f) => ({ ...f, [`prop:${key}`]: id != null && id !== "" }));
       return res;
     };
