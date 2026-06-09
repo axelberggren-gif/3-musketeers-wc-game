@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { supabaseServer } from "@/lib/supabase/server";
 import { InviteControls } from "./InviteControls";
+import { RemoveMemberButton } from "./RemoveMemberButton";
 
 export default async function MembersPage({
   params,
@@ -27,7 +28,7 @@ export default async function MembersPage({
   const [membersRes, invitesRes] = await Promise.all([
     supabase
       .from("league_members")
-      .select("role, joined_at, profile:user_id(username, display_name)")
+      .select("user_id, role, joined_at, profile:user_id(username, display_name)")
       .eq("league_id", league.id),
     isOwner
       ? supabase
@@ -39,6 +40,7 @@ export default async function MembersPage({
   ]);
 
   const members = (membersRes.data ?? []).map((m) => ({
+    user_id: m.user_id as string,
     role: m.role as "owner" | "member",
     joined_at: m.joined_at as string,
     profile: (Array.isArray(m.profile) ? m.profile[0] : m.profile) as {
@@ -89,7 +91,16 @@ export default async function MembersPage({
                   {m.profile.display_name ?? m.profile.username}
                 </Link>
               </div>
-              {m.role === "owner" && <span className="badge badge-pitch !text-[10px]">Owner</span>}
+              {m.role === "owner" ? (
+                <span className="badge badge-pitch !text-[10px]">Owner</span>
+              ) : isOwner ? (
+                <RemoveMemberButton
+                  leagueId={league.id}
+                  leagueSlug={slug}
+                  userId={m.user_id}
+                  memberName={m.profile.display_name ?? m.profile.username}
+                />
+              ) : null}
             </li>
           ))}
         </ul>

@@ -166,3 +166,72 @@ export async function revokeInvite(inviteId: string, leagueSlug: string) {
   revalidatePath(`/leagues/${leagueSlug}/members`);
   return { ok: true } as const;
 }
+
+// Owner-only: remove a member from this league. Deletes the membership row
+// (which alone drops them from the roster, Top-5, leaderboard, and member
+// dropdowns — all key off league_members) and tidies their league-scoped
+// leftovers so no ghost data lingers. The user's account/login and any other
+// leagues are untouched, so they can be re-invited. Service-role is required
+// because the leftover cleanup touches rows the owner's own RLS session can't
+// delete; the explicit owner check below is the authorization gate.
+export async function removeLeagueMember(leagueId: string, userId: string, leagueSlug: string) {
+  const supabase = await supabaseServer();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not signed in");
+
+  const service = supabaseService();
+  const { data: league } = await service
+    .from("leagues")
+    .select("owner_id, slug")
+    .eq("id", leagueId)
+    .single();
+  if (!league || league.owner_id !== user.id) {
+    return { ok: false, error: "Only the league owner can remove members." } as const;
+  }
+  if (userId === league.owner_id) {
+    // The owner leaves by deleting the league, not by removing themselves here.
+    return { ok: false, error: "The owner can't be removed." } as const;
+  }
+
+  const { error: memberError } = await service
+    .from("league_members")
+    .delete()
+    .eq("league_id", leagueId)
+    .eq("user_id", userId);
+  if (memberError) return { ok: false, error: memberError.message } as const;
+
+  // Tidy this user's league-scoped leftovers. All are no-ops pre-kickoff (the
+  // common "prune a duplicate" case); defensive for mid-tournament removals.
+  // Their crown/spoon votes + votes cast for them in this league. Two explicit
+  // .eq() deletes rather than a string-interpolated .or() — userId is a
+  // client-supplied server-action arg, and interpolating it into a PostgREST
+  // filter string would let a crafted value inject extra filter terms (e.g.
+  // a `neq` matching every row). .eq() URL-encodes the value, so it can't.
+  await service.from("league_group_bets").delete().eq("league_id", leagueId).eq("voter_id", userId);
+  await service.from("league_group_bets").delete().eq("league_id", leagueId).eq("votee_id", userId);
+  // League-scoped awards only — global awards (league_id IS NULL) belong to the
+  // user's other leagues and are left untouched.
+  await service.from("point_awards").delete().eq("league_id", leagueId).eq("user_id", userId);
+
+  // Banter: their replies on other members' threads in this league, then their
+  // own messages (replies under those cascade via the 0011 FK).
+  const { data: msgRows } = await service
+    .from("banter_messages")
+    .select("id")
+    .eq("league_id", leagueId);
+  const msgIds = (msgRows ?? []).map((m) => m.id);
+  if (msgIds.length) {
+    await service.from("banter_replies").delete().eq("user_id", userId).in("message_id", msgIds);
+  }
+  await service.from("banter_messages").delete().eq("league_id", leagueId).eq("user_id", userId);
+
+  // Recompute standings so the leaderboard reflects the removal immediately.
+  await service.rpc("refresh_league_standings");
+
+  revalidatePath(`/leagues/${leagueSlug}/members`);
+  revalidatePath(`/leagues/${leagueSlug}`);
+  revalidatePath(`/leagues/${leagueSlug}/leaderboard`);
+  return { ok: true } as const;
+}
