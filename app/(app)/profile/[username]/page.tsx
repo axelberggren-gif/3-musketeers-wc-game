@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { supabaseServer } from "@/lib/supabase/server";
 import { loadProfileStats } from "@/lib/stats/profile";
+import { loadPickPersonality } from "@/lib/stats/personality";
+import { PickPersonality } from "@/components/stats/PickPersonality";
 import { PickReactionStrip } from "@/components/social/PickReactionStrip";
 import { loadPickReactions } from "@/lib/predictions/reactions";
 import { aggregateKey } from "@/lib/predictions/reactions-shared";
@@ -35,7 +37,10 @@ export default async function ProfilePage({
   ]);
   if (!profile) notFound();
 
-  const stats = await loadProfileStats(profile.id, viewerData.user?.id);
+  const [stats, personality] = await Promise.all([
+    loadProfileStats(profile.id, viewerData.user?.id),
+    loadPickPersonality(profile.id, viewerData.user?.id),
+  ]);
 
   const { data: recentPicksRaw } = await supabase
     .from("match_predictions")
@@ -137,22 +142,7 @@ export default async function ProfilePage({
         </section>
       )}
 
-      <section
-        className="card flex flex-col gap-3"
-        style={{ boxShadow: "4px 4px 0 var(--coral)" }}
-      >
-        <span
-          className="badge badge-gold self-start !text-[10px]"
-          style={{ boxShadow: "2px 2px 0 var(--ink)" }}
-        >
-          Pick personality
-        </span>
-        <p className="text-sm text-ink-soft">
-          Pick-mix bar, you-vs-league comparison bars and boldness stats are coming once the
-          cohort aggregation queries land — see{" "}
-          <code className="font-mono-sticker text-xs">DESIGN_MISALIGNMENTS.md</code>.
-        </p>
-      </section>
+      {personality && <PickPersonality data={personality} />}
     </main>
   );
 }

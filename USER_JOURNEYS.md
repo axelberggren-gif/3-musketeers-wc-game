@@ -209,7 +209,7 @@ flowchart TD
 - Verify avatar tile (initial letter on gold background), display name, `@username`.
 - Verify primary stats row: Points, Acc. 1X2 (%), Picks made, Picks correct.
 - Verify secondary stats row: 1X2, Bracket, Tournament, Props point breakdowns.
-- Verify "Pick personality" placeholder section is present.
+- Verify the **Pick personality** card: a Home/Draw/Away pick-mix bar; three comparison bars (Group accuracy / Knockout accuracy / Bracket survival) — each shows "Not enough data yet" until matches kick off, then fills with your value over a hatched league-average track; and three tiles (Boldness %, Avg pick time, Upsets called). On your own profile it shows your full picks; on a league-mate's it shows their revealed picks once round 1 has locked; on a stranger's (no shared league) the card is absent.
 - Unknown username → `notFound()` 404.
 
 ---

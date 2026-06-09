@@ -77,25 +77,30 @@ with a `lib/stats/pulse.ts` module.
 
 ## 4. Pick personality (Profile)
 
-**Design**: `project/sticker-d.jsx` + `project/mobile-c.jsx`. Replaces the rejected
-per-MD accuracy chart. Includes:
-- Stacked Home/Draw/Away pick-mix bar
-- Three "you vs league average" comparison bars: Group acc, Knockout acc, Bracket survival.
-  Your bar overlays a hatched league-avg track.
-- Three secondary stats: Boldness % (low-consensus picks), Avg pick time, Upsets called.
+**Status (2026-06-09)**: shipped. The `/profile/[username]` placeholder card is now the
+real thing — `components/stats/PickPersonality.tsx` (a **server** presentational component,
+not the "client component" the original note imagined — it has no interactivity), fed by the
+new `lib/stats/personality.ts` aggregator (`loadPickPersonality(userId, viewerId)` + pure,
+unit-tested helpers in `personality.test.ts`). It renders the full design:
+- Stacked Home/Draw/Away **pick-mix bar**.
+- Three **"you vs league average"** comparison bars — Group accuracy, Knockout accuracy,
+  Bracket survival — each a solid user fill over a hatched (`repeating-linear-gradient`)
+  league-average ghost track. League average = mean of each cohort member's own accuracy.
+- Three secondary stats: **Boldness %** (picks shared by <25% of the league cohort),
+  **Avg pick time** (mean lead before kickoff), **Upsets called** (correct group picks where
+  the FIFA-weaker side won by ≥5 ranks).
 
-**Needed to ship**:
-- Aggregation on `match_predictions` per user: count by pick value, accuracy split by
-  stage (group vs knockout).
-- League-wide cohort: same aggregations averaged across the user's leagues so the
-  comparison track has data.
-- New `lib/stats/personality.ts` module.
-- `components/stats/PickPersonality.tsx` client component (read-only, no actions).
+Visible on **every** profile, populated by what RLS lets the viewer see (full on your own;
+your revealed picks to a league-mate; hidden for strangers → the card is omitted). The
+cohort + boldness fill in as the tournament plays. To make the cohort available from
+group-stage start (not match-by-match), migration `0026_reveal_group_picks_at_round1_lock.sql`
+aligns `match_predictions` reveal to round-1 lock, matching how `tournament_predictions`
+already reveal. Bracket survival = the champion (`W`) pick's rounds-won as a fraction of the
+knockout ladder. No service-role, no scoring change.
 
-**Why deferred**: this PR keeps `loadProfileStats` untouched. The profile page now shows
-a placeholder card noting where this will land. The original `AccuracyChart` component
-is still in `components/stats/AccuracyChart.tsx` but is no longer rendered (per chat2:
-"per-MD doesn't apply — all predictions lock at tournament start").
+**Still here**: the original `AccuracyChart.tsx` (the rejected per-MD chart) remains
+orphaned in `components/stats/` — a candidate for deletion (+ dropping `recharts`) in a
+follow-up.
 
 ## 5. Album progress strip
 
