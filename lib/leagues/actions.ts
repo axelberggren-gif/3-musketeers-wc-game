@@ -6,6 +6,11 @@ import * as Sentry from "@sentry/nextjs";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { randomToken } from "@/lib/utils";
 
+// Max people one invite link admits before it's "used up". Friends-league links
+// get shared widely (WhatsApp, group chats), so this is deliberately generous;
+// redeem_league_invite() (migration 0009) enforces it atomically under a row lock.
+const INVITE_MAX_USES = 100;
+
 function slugify(name: string) {
   return name
     .toLowerCase()
@@ -131,7 +136,7 @@ export async function createInvite(leagueId: string) {
     league_id: leagueId,
     token,
     created_by: user.id,
-    max_uses: 25,
+    max_uses: INVITE_MAX_USES,
     expires_at: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString(),
   });
   if (error) return { ok: false, error: error.message } as const;
