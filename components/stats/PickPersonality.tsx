@@ -109,7 +109,7 @@ function ComparisonRow({
         ? `${stat.userCorrect}/${stat.userSample}`
         : null
       : stat.userSample > 0
-        ? `won ${stat.userSample} KO`
+        ? `played ${stat.userSample} KO`
         : null;
 
   const ariaLabel = `${label}: ${userPct === null ? "no data" : `${userPct}%`}${

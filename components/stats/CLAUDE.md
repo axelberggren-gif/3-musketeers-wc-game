@@ -45,6 +45,7 @@ Read-only stat visualisations rendered on `/profile/[username]`. The aggregation
   `z-index` so the two never visually merge (mirrors the `.pitch-stripes` idiom).
 
 ## Recent changes
+- 2026-06-09: `PickPersonality.tsx` bracket-survival hint reads `played {N} KO` (was `won {N} KO`) — `userSample` is the champion's games played, not won (follow-up to #120 review).
 - 2026-06-09: Created `PickPersonality.tsx` for `DESIGN_MISALIGNMENTS.md` §4 — replaces the
   profile-page placeholder. Backed by the new `lib/stats/personality.ts` aggregator +
   migration `0026_reveal_group_picks_at_round1_lock.sql` (cohort data from group-stage
