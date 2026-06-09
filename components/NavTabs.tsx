@@ -75,22 +75,38 @@ export function NavTabs({ tabs }: { tabs: NavTab[] }) {
         })}
       </div>
 
-      {/* Mobile/tablet: compact dropdown — trigger shows the current tab. */}
+      {/* Mobile/tablet: a hamburger-menu so it's unmistakably a multi-tab menu
+          (a lone pill read as just another tab). The trigger shows a hamburger
+          icon (→ ✕ when open) + the current tab's label so you still know where
+          you are; the panel lists every tab, active one ✓-marked. */}
       <div className="relative lg:hidden" ref={containerRef}>
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
           aria-haspopup="menu"
           aria-expanded={open}
-          className={`${PILL_BASE} inline-flex items-center gap-1.5 ${active ? PILL_ACTIVE : PILL_INACTIVE}`}
+          aria-label={open ? "Close menu" : "Open menu"}
+          className={`${PILL_BASE} inline-flex items-center gap-2 ${active ? PILL_ACTIVE : PILL_INACTIVE}`}
         >
-          <span>{active?.label ?? "Menu"}</span>
-          <span
-            aria-hidden
-            className={`text-[0.7em] leading-none transition-transform ${open ? "rotate-180" : ""}`}
-          >
-            ▾
+          {/* Hamburger ⇄ close icon — the universal "more tabs" cue. */}
+          <span className="relative inline-flex h-3.5 w-4 flex-col justify-between" aria-hidden>
+            <span
+              className={`block h-0.5 w-full rounded-full bg-current transition-transform ${
+                open ? "translate-y-[6px] rotate-45" : ""
+              }`}
+            />
+            <span
+              className={`block h-0.5 w-full rounded-full bg-current transition-opacity ${
+                open ? "opacity-0" : ""
+              }`}
+            />
+            <span
+              className={`block h-0.5 w-full rounded-full bg-current transition-transform ${
+                open ? "-translate-y-[6px] -rotate-45" : ""
+              }`}
+            />
           </span>
+          <span>{active?.label ?? "Menu"}</span>
         </button>
 
         {open && (
