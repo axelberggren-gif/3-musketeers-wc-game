@@ -154,6 +154,30 @@ export function mapWinner(winner: FdMatch["score"]["winner"]) {
   return "DRAW" as const;
 }
 
+// Resolve a finished match's winner, falling back to the full-time scoreline
+// when football-data leaves `score.winner` null. The bulk
+// `/competitions/WC/matches` endpoint regularly reports a match as FINISHED
+// with `fullTime` scores populated but `winner` still null for a while after
+// the final whistle. score_match() (and syncFixtures' finished-match gate)
+// key off the winner, so without this fallback a played match is stored with a
+// scoreline but never scored — its picks award nobody until the API catches up.
+//
+// Only the GROUP stage produces a genuine DRAW; a level knockout is decided by
+// extra time / penalties, which football-data reports via `score.winner`. So
+// for a level knockout scoreline with a null winner we stay null and wait for
+// the API rather than mislabel it a draw.
+export function resolveWinner(m: FdMatch) {
+  const mapped = mapWinner(m.score.winner);
+  if (mapped) return mapped;
+  if (m.status !== "FINISHED") return null;
+
+  const { home, away } = m.score.fullTime;
+  if (home == null || away == null) return null;
+  if (home > away) return "HOME" as const;
+  if (away > home) return "AWAY" as const;
+  return mapStage(m.stage) === "GROUP" ? ("DRAW" as const) : null;
+}
+
 export function mapStatus(status: FdMatch["status"]) {
   if (status === "IN_PLAY" || status === "PAUSED") return "LIVE" as const;
   if (status === "FINISHED") return "FINISHED" as const;

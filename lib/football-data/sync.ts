@@ -5,7 +5,7 @@ import {
   deriveBracketSlot,
   mapStage,
   mapStatus,
-  mapWinner,
+  resolveWinner,
   type FdMatch,
 } from "./client";
 
@@ -127,7 +127,7 @@ export async function syncFixtures() {
         status: mapStatus(m.status),
         home_score: m.score.fullTime.home,
         away_score: m.score.fullTime.away,
-        winner: mapWinner(m.score.winner),
+        winner: resolveWinner(m),
         finished_at: m.status === "FINISHED" ? new Date().toISOString() : null,
       };
 
