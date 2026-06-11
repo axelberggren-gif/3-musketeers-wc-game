@@ -34,6 +34,11 @@ in `app/api/cron/` and from admin actions.
 ## Known gotchas
 - football-data's `stage` enum doesn't have a direct mapping for our `3RD` (third
   place playoff); see `mapStage()` in `client.ts` if you add new stages.
+- football-data's bulk `/competitions/WC/matches` endpoint can report a match as
+  `status: "FINISHED"` with the `fullTime` scoreline populated but `score.winner`
+  still **null** for a window after the final whistle. Never key "is this match
+  scoreable" off `score.winner` alone — `syncFixtures()` uses `resolveWinner(m)`
+  (derives the winner from `fullTime`, DRAW only for GROUP), not `mapWinner()`.
 - `seedTeams()` upserts the team first (returning its local UUID) and then upserts
   players with `team_id` set in the same call — no second pass needed.
 - `syncFixtures()` calls SQL RPCs `score_match`, `score_bracket`,
@@ -66,6 +71,7 @@ in `app/api/cron/` and from admin actions.
 
 ## Recent changes
 <!-- Newest first. Keep last 10. One line per entry. -->
+- 2026-06-11: `syncFixtures()` resolves a FINISHED match's winner from the `fullTime` scoreline when football-data leaves `score.winner` null. The bulk `/competitions/WC/matches` endpoint regularly reports a just-finished match as `status: "FINISHED"` with `fullTime` populated but `winner` still null for a window after FT, so the old `winner: mapWinner(m.score.winner)` stored the scoreline but left `winner` NULL — the match was never added to the score-this-run set and `score_match()` (which also early-returns on a null winner) awarded nobody (symptom: admin sync log `inserted=104 finished=0 scored=0 detailsSynced=1`). New `resolveWinner(m)` in `client.ts` falls back to `fullTime` for a FINISHED match with no `score.winner`; a level scoreline → `DRAW` only in the GROUP stage (a level knockout is decided by ET/penalties, reported via `score.winner`, so it stays null until the API fills it). `sync.ts` swapped `mapWinner` → `resolveWinner`. Self-heals on the next sync; tests in `client.test.ts`.
 - 2026-06-05: `syncScorers()` repurposed from an informational `/scorers` fetch (fed no scoring table) into a daily detail-drain + reconcile backstop: drains up to `SCORERS_DRAIN_LIMIT = 8` pending FINISHED-match details via `drainPendingMatchDetails()`, then re-runs `score_tournament()` + `refresh_league_standings`. Pairs with migration 0016, which gates `score_tournament()`'s top-scorer block and `score_troublemaker()` on `all_match_details_synced()` so those two categories never resolve on a partial drain backlog right after the Final (#83). Return shape changed to `{ detailsSynced, scored }`; `runSyncScorers()` admin action just spreads it. `fd.scorers()` / `FdScorer` are now unused by sync but kept in `client.ts`.
 - 2026-05-26: `FdMatch.stage` union gains `"LAST_32"` and `mapStage()` translates it to our new `R32` local stage (added in migration 0013). `deriveBracketSlot()` now mints `R32-1..R32-16` for first-knockout-round matches by kickoff order. `syncFixtures()` already calls `deriveBracketSlot()` generically so it picks up R32 without further edits. If football-data uses a different label than `LAST_32` for actual WC 2026 data, only this mapping needs updating — the DB enum value `R32` is the canonical local stage.
 - 2026-05-24: Fixed `group_letter` parser — `m.group` is `"GROUP_A"`..`"GROUP_L"` in v4 (matching the `stage` enum convention), not the legacy `"Group A"` form. The old `replace("Group ", "").slice(0, 1)` was a no-op and returned `"G"` for every group. New `parseGroupLetter()` helper accepts both. `syncFixtures` now calls `backfill_team_group_letters` RPC (migration 0010) after the match upsert loop so `teams.group_letter` (which nothing else wrote) self-heals from match data.
