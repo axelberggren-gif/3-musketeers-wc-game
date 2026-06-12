@@ -49,6 +49,7 @@ when they touch the corresponding area.
 @components/predict/CLAUDE.md
 @components/banter/CLAUDE.md
 @components/league-bets/CLAUDE.md
+@components/picks/CLAUDE.md
 @components/stats/CLAUDE.md
 @analytics/CLAUDE.md
 

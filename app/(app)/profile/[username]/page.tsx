@@ -3,22 +3,19 @@ import { notFound } from "next/navigation";
 import { supabaseServer } from "@/lib/supabase/server";
 import { loadProfileStats } from "@/lib/stats/profile";
 import { loadPickPersonality } from "@/lib/stats/personality";
+import {
+  groupMatchesByLetter,
+  loadGroupStagePicks,
+  pickOutcome,
+  tallyPickRecord,
+} from "@/lib/stats/group-picks";
 import { PickPersonality } from "@/components/stats/PickPersonality";
+import { PickChip } from "@/components/picks/PickChip";
+import { MatchScoreline } from "@/components/picks/MatchScoreline";
 import { PickReactionStrip } from "@/components/social/PickReactionStrip";
 import { loadPickReactions } from "@/lib/predictions/reactions";
 import { aggregateKey } from "@/lib/predictions/reactions-shared";
-import type { Pick1X2 } from "@/lib/supabase/types";
-
-type TeamLite = { code: string; name: string };
-type MatchLite = {
-  id: string;
-  kickoff_at: string;
-  status: string | null;
-  home_score: number | null;
-  away_score: number | null;
-  home: TeamLite | null;
-  away: TeamLite | null;
-};
+import { POINTS } from "@/lib/scoring/rules";
 
 export default async function ProfilePage({
   params,
@@ -37,26 +34,38 @@ export default async function ProfilePage({
   ]);
   if (!profile) notFound();
 
-  const [stats, personality] = await Promise.all([
+  const isSelf = viewerData.user?.id === profile.id;
+
+  const [stats, personality, groupPicks] = await Promise.all([
     loadProfileStats(profile.id, viewerData.user?.id),
     loadPickPersonality(profile.id, viewerData.user?.id),
+    loadGroupStagePicks([profile.id]),
   ]);
 
-  const { data: recentPicksRaw } = await supabase
-    .from("match_predictions")
-    .select(
-      "id, pick, submitted_at, match:matches!match_id(id, kickoff_at, status, home_score, away_score, home:teams!home_team_id(code, name), away:teams!away_team_id(code, name))",
-    )
-    .eq("user_id", profile.id)
-    .order("submitted_at", { ascending: false })
-    .limit(10);
-
-  const recentPicks = (recentPicksRaw ?? []).filter((r) => r.match);
+  // RLS scopes what's visible: everything on your own profile, a league-mate's
+  // picks once round 1 locks, nothing for strangers (section omitted below).
+  const ownPicks = groupPicks.picksByUser[profile.id] ?? {};
+  const record = tallyPickRecord(groupPicks.matches, ownPicks);
+  const groups = groupMatchesByLetter(groupPicks.matches);
 
   const reactionMap = await loadPickReactions(
-    recentPicks.map((r) => ({ id: r.id as string, kind: "match" as const })),
+    Object.values(ownPicks).map((p) => ({ id: p.pickId, kind: "match" as const })),
     viewerData.user?.id ?? null,
   );
+
+  // "Compare" appears on someone else's profile once their picks are visible
+  // to the viewer (i.e. they're a league-mate and round 1 has locked).
+  let compareHref: string | null = null;
+  if (!isSelf && viewerData.user && record.made > 0) {
+    const { data: viewerProfile } = await supabase
+      .from("profiles")
+      .select("username")
+      .eq("id", viewerData.user.id)
+      .maybeSingle();
+    if (viewerProfile) {
+      compareHref = `/compare?a=${encodeURIComponent(viewerProfile.username)}&b=${encodeURIComponent(profile.username)}`;
+    }
+  }
 
   const initial = (profile.display_name ?? profile.username).slice(0, 1).toUpperCase();
 
@@ -77,6 +86,14 @@ export default async function ProfilePage({
           </h1>
           <p className="font-mono-sticker text-xs text-ink-soft">@{profile.username}</p>
         </div>
+        {compareHref && (
+          <Link
+            href={compareHref}
+            className="btn btn-primary btn-sm ml-auto self-start whitespace-nowrap"
+          >
+            ⚔️ Compare
+          </Link>
+        )}
       </header>
 
       <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -97,48 +114,82 @@ export default async function ProfilePage({
         <Stat label="Props" value={stats.propPoints} subtle />
       </section>
 
-      {recentPicks.length > 0 && (
-        <section className="card flex flex-col gap-3">
-          <h2 className="font-display uppercase tracking-wide text-base">Recent picks</h2>
-          <ul className="flex flex-col divide-y divide-dashed divide-ink-soft/40">
-            {recentPicks.map((row) => {
-              const match = row.match as MatchLite | null;
-              const home = match?.home ?? null;
-              const away = match?.away ?? null;
-              const pick = row.pick as Pick1X2;
-              const finished = match?.status === "FINISHED";
-              const score =
-                finished && match
-                  ? `${match.home_score ?? 0}–${match.away_score ?? 0}`
-                  : null;
-              const agg = reactionMap.get(aggregateKey("match", row.id as string));
-              return (
-                <li key={row.id as string} className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <Link
-                      href={`/match/${match?.id}`}
-                      className="font-display uppercase text-sm tracking-wide hover:text-coral truncate"
-                    >
-                      {home?.code ?? "?"} <span className="text-ink-soft">vs</span> {away?.code ?? "?"}
-                      {score && (
-                        <span className="font-mono-sticker text-xs text-ink-soft ml-2">{score}</span>
-                      )}
-                    </Link>
-                    <span className="badge badge-ink !text-[10px]">{pick}</span>
-                  </div>
-                  {agg && (
-                    <PickReactionStrip
-                      pickId={row.id as string}
-                      pickKind="match"
-                      initialCounts={agg.counts}
-                      initialMine={Array.from(agg.mine)}
-                      revalidatePath={`/profile/${profile.username}`}
-                    />
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+      {(record.made > 0 || isSelf) && groupPicks.matches.length > 0 && (
+        <section className="card flex flex-col gap-4">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <h2 className="font-display uppercase tracking-wide text-base">
+              Group-stage picks
+            </h2>
+            {record.decided > 0 && (
+              <span className="badge badge-gold !text-[10px]">
+                ✓ {record.correct}/{record.decided} correct
+              </span>
+            )}
+          </div>
+          {record.made === 0 ? (
+            <p className="text-sm text-ink-soft">
+              No picks yet —{" "}
+              <Link href="/predict" className="underline hover:text-coral">
+                make your group-stage calls
+              </Link>
+              .
+            </p>
+          ) : (
+            <div className="grid md:grid-cols-2 gap-3">
+              {groups.map(({ letter, matches }) => (
+                <div
+                  key={letter}
+                  className="rounded-xl border-2 border-ink bg-paper-2 p-3 flex flex-col gap-2"
+                  style={{ boxShadow: "3px 3px 0 var(--ink)" }}
+                >
+                  <h3 className="font-display uppercase text-sm tracking-wide">
+                    Group {letter}
+                  </h3>
+                  <ul className="flex flex-col divide-y divide-dashed divide-ink-soft/40">
+                    {matches.map((m) => {
+                      const p = ownPicks[m.id] ?? null;
+                      const outcome = p ? pickOutcome(p.pick, m) : "pending";
+                      const agg = p
+                        ? reactionMap.get(aggregateKey("match", p.pickId))
+                        : undefined;
+                      return (
+                        <li
+                          key={m.id}
+                          className="flex flex-col gap-1.5 py-2 first:pt-0 last:pb-0"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <MatchScoreline match={m} />
+                            <span className="flex items-center gap-1.5">
+                              {p && outcome === "correct" && (
+                                <span className="font-mono-sticker text-[10px] font-bold text-pitch">
+                                  +{POINTS.match1x2}
+                                </span>
+                              )}
+                              <PickChip
+                                pick={p?.pick ?? null}
+                                homeCode={m.home?.code}
+                                awayCode={m.away?.code}
+                                outcome={outcome}
+                              />
+                            </span>
+                          </div>
+                          {p && agg && (
+                            <PickReactionStrip
+                              pickId={p.pickId}
+                              pickKind="match"
+                              initialCounts={agg.counts}
+                              initialMine={Array.from(agg.mine)}
+                              revalidatePath={`/profile/${profile.username}`}
+                            />
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
       )}
 
