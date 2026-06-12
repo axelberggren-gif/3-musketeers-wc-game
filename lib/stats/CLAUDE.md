@@ -17,6 +17,11 @@ in `components/stats/`.
   comparison bars (Group/Knockout accuracy, Bracket survival), and Boldness % / Avg pick
   time / Upsets called. Returns `null` when no content is visible to the viewer.
 - `personality.test.ts` — vitest unit tests for the pure helpers (the math runs without a DB).
+- `group-picks.ts` — `loadGroupStagePicks(userIds)`: every GROUP match + each given
+  user's 1X2 pick per match (RLS-scoped), feeding the profile "Group-stage picks"
+  board and `/compare`. Pure helpers `pickOutcome()` (correct/wrong/pending),
+  `tallyPickRecord()` (made/decided/correct), `groupMatchesByLetter()`.
+- `group-picks.test.ts` — vitest unit tests for those pure helpers.
 
 ## Conventions
 - Use `supabaseServer()` (RLS-aware, acts as the viewer) — **never** `supabaseService()`.
@@ -52,6 +57,12 @@ in `components/stats/`.
   the stat to `null`.
 
 ## Recent changes
+- 2026-06-12: Added `group-picks.ts` + `group-picks.test.ts` — RLS-aware loader for the
+  full group-stage picks board (profile page) and the `/compare` head-to-head, with
+  pure tested helpers (`pickOutcome` / `tallyPickRecord` / `groupMatchesByLetter`).
+  Multi-user (`userIds[]`) so one fetch serves both compare slots. Same reveal
+  assumption as `personality.ts` (migration 0026: league-mates see group picks once
+  round 1 locks); a FINISHED match with `winner = null` counts as pending, not decided.
 - 2026-06-09: Added `personality.ts` + `personality.test.ts` for `DESIGN_MISALIGNMENTS.md`
   §4 (Pick personality). RLS-aware cohort, pure tested helpers, `null`-when-empty contract.
   Rendered by `components/stats/PickPersonality.tsx`; cohort visibility from group-stage
