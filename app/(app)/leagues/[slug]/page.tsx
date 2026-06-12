@@ -4,10 +4,10 @@ import { supabaseServer } from "@/lib/supabase/server";
 import { CountryFlag } from "@/components/CountryFlag";
 import { LocalKickoff } from "@/components/LocalKickoff";
 import { BanterFeed } from "@/components/banter/BanterFeed";
+import { loadBanter } from "@/lib/banter/load";
 import { computeLockState } from "@/lib/scoring/lock";
 import { LeagueBetsCard } from "@/components/league-bets/LeagueBetsCard";
 import { VoteBadges } from "@/components/league-bets/VoteBadges";
-import type { BanterMessage, BanterReply } from "@/lib/supabase/types";
 import type { VoteTally } from "@/lib/league-bets/shared";
 import type { ProfileLite } from "@/components/banter/BanterMessage";
 
@@ -30,7 +30,7 @@ export default async function LeagueHomePage({
     .maybeSingle();
   if (!league) notFound();
 
-  const [standingsRes, upcomingRes, recentRes, messagesRes, membersRes, tournamentRes, betsRes] =
+  const [standingsRes, upcomingRes, recentRes, banter, membersRes, tournamentRes, betsRes] =
     await Promise.all([
     // Member-gated accessor (migration 0027) — direct SELECT on the
     // league_standings matview is revoked for authenticated users.
@@ -54,12 +54,7 @@ export default async function LeagueHomePage({
       .eq("status", "FINISHED")
       .order("kickoff_at", { ascending: false })
       .limit(5),
-    supabase
-      .from("banter_messages")
-      .select("id, league_id, user_id, body, created_at")
-      .eq("league_id", league.id)
-      .order("created_at", { ascending: false })
-      .limit(50),
+    loadBanter(league.id),
     supabase
       .from("league_members")
       .select("user_id, profile:user_id(username, display_name)")
@@ -70,24 +65,6 @@ export default async function LeagueHomePage({
       .select("voter_id, bet_kind, votee_id")
       .eq("league_id", league.id),
   ]);
-
-  const messagesDesc = (messagesRes.data ?? []) as BanterMessage[];
-  // Ascending order for state; render layer re-sorts descending.
-  const initialMessages = [...messagesDesc].reverse();
-  const messageIds = initialMessages.map((m) => m.id);
-
-  const repliesRes = messageIds.length
-    ? await supabase
-        .from("banter_replies")
-        .select("id, message_id, user_id, body, created_at")
-        .in("message_id", messageIds)
-        .order("created_at", { ascending: true })
-    : { data: [] as BanterReply[] };
-
-  const initialReplies: Record<string, BanterReply[]> = {};
-  for (const r of (repliesRes.data ?? []) as BanterReply[]) {
-    (initialReplies[r.message_id] ??= []).push(r);
-  }
 
   const memberRows = (membersRes.data ?? []) as Array<{
     user_id: string;
@@ -265,8 +242,8 @@ export default async function LeagueHomePage({
           <BanterFeed
             leagueId={league.id}
             currentUserId={user.id}
-            initialMessages={initialMessages}
-            initialReplies={initialReplies}
+            initialMessages={banter.initialMessages}
+            initialReplies={banter.initialReplies}
             profilesById={profilesById}
           />
         </aside>

@@ -51,6 +51,10 @@ per-group picks board on `/profile/[username]` and the side-by-side head-to-head
   returns `pending` then, so chips stay neutral instead of flashing wrong colours.
 
 ## Recent changes
+- 2026-06-12: `PickChip` + `MatchScoreline` are now also rendered by the `/today`
+  start page (`components/today/TodayBoard.tsx` — member pick grids + compact day
+  rows). Their type imports resolve via the client-safe `lib/stats/picks-shared.ts`
+  split (re-exported from `group-picks.ts`); no component changes.
 - 2026-06-12: Created for the public group-stage picks feature: `PickChip`,
   `MatchScoreline`, `ComparePlayerSelect`. Used by the new full picks board on
   `/profile/[username]` (replacing the 10-row "Recent picks" list) and the new
