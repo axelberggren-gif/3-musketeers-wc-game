@@ -48,24 +48,26 @@ export default async function ProfilePage({
   const record = tallyPickRecord(groupPicks.matches, ownPicks);
   const groups = groupMatchesByLetter(groupPicks.matches);
 
-  const reactionMap = await loadPickReactions(
-    Object.values(ownPicks).map((p) => ({ id: p.pickId, kind: "match" as const })),
-    viewerData.user?.id ?? null,
-  );
-
   // "Compare" appears on someone else's profile once their picks are visible
   // to the viewer (i.e. they're a league-mate and round 1 has locked).
-  let compareHref: string | null = null;
-  if (!isSelf && viewerData.user && record.made > 0) {
-    const { data: viewerProfile } = await supabase
-      .from("profiles")
-      .select("username")
-      .eq("id", viewerData.user.id)
-      .maybeSingle();
-    if (viewerProfile) {
-      compareHref = `/compare?a=${encodeURIComponent(viewerProfile.username)}&b=${encodeURIComponent(profile.username)}`;
-    }
-  }
+  const wantsCompare = !isSelf && !!viewerData.user && record.made > 0;
+  const [reactionMap, viewerProfileRes] = await Promise.all([
+    loadPickReactions(
+      Object.values(ownPicks).map((p) => ({ id: p.pickId, kind: "match" as const })),
+      viewerData.user?.id ?? null,
+    ),
+    wantsCompare
+      ? supabase
+          .from("profiles")
+          .select("username")
+          .eq("id", viewerData.user!.id)
+          .maybeSingle()
+      : Promise.resolve(null),
+  ]);
+  const viewerUsername = viewerProfileRes?.data?.username ?? null;
+  const compareHref = viewerUsername
+    ? `/compare?a=${encodeURIComponent(viewerUsername)}&b=${encodeURIComponent(profile.username)}`
+    : null;
 
   const initial = (profile.display_name ?? profile.username).slice(0, 1).toUpperCase();
 
