@@ -17,6 +17,7 @@ export async function Nav() {
     .single();
 
   const tabs: NavTab[] = [
+    { href: "/today", label: "Today" },
     { href: "/predict", label: "Group stage", exact: true },
     { href: "/predict/outcomes", label: "Outcomes" },
     { href: "/predict/bracket", label: "Bracket" },
@@ -28,7 +29,7 @@ export async function Nav() {
     <nav className="sticky top-0 z-20 border-b-2 border-ink bg-paper/95 backdrop-blur">
       <div className="max-w-6xl mx-auto px-3 sm:px-5 py-3 flex items-center gap-2 sm:gap-3">
         <Link
-          href="/leagues"
+          href="/today"
           className="inline-flex items-center gap-1.5 bg-ink text-gold px-3 py-1.5 rounded-lg border-2 border-ink font-display text-base sm:text-lg tracking-wider"
           style={{ boxShadow: "3px 3px 0 var(--coral)" }}
         >

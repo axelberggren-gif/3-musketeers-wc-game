@@ -51,6 +51,7 @@ when they touch the corresponding area.
 @components/league-bets/CLAUDE.md
 @components/picks/CLAUDE.md
 @components/stats/CLAUDE.md
+@components/today/CLAUDE.md
 @analytics/CLAUDE.md
 
 ## Global invariants (do not break)

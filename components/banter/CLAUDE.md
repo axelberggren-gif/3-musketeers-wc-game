@@ -5,10 +5,14 @@
 ## Purpose
 Client components for the per-league Banter feed: a sticker-styled composer with
 180-char counter + emoji chips, threaded replies, and live updates via Supabase
-Realtime. Mounts inside the league home page (`app/(app)/leagues/[slug]/page.tsx`)
-on the desktop right sidebar (`lg:grid-cols-[1.8fr_1fr]`) and stacked below stats
-on mobile. Backed by `lib/banter/actions.ts` and the `banter_messages` /
-`banter_replies` tables from migration `0011_banter.sql`.
+Realtime. Mounts in **two places** — the league home page
+(`app/(app)/leagues/[slug]/page.tsx`) and the `/today` start page
+(`app/(app)/today/page.tsx`), both on the desktop right sidebar
+(`lg:grid-cols-[1.8fr_1fr]`) and stacked on mobile. Both mounts subscribe to the
+same `league:<id>:banter` channel, so they are live-linked views of one chat.
+Backed by `lib/banter/actions.ts`, the shared initial-data loader
+`lib/banter/load.ts` (`loadBanter(leagueId)` — latest 50 messages + replies), and
+the `banter_messages` / `banter_replies` tables from migration `0011_banter.sql`.
 
 ## Key files
 - `BanterFeed.tsx` — Container. Owns `messages`, `replies`, `expandedThreads` state.
@@ -78,6 +82,11 @@ on mobile. Backed by `lib/banter/actions.ts` and the `banter_messages` /
   navigation.
 
 ## Recent changes
+- 2026-06-12: `BanterFeed` now also mounts on the `/today` start page. The
+  initial messages/replies fetch was extracted from the league page into
+  `lib/banter/load.ts` (`loadBanter(leagueId)`) so both pages bootstrap the feed
+  identically; no component or channel changes — the shared Realtime channel
+  already keeps the two mounts in sync.
 - 2026-05-25: initial banter feature shipped (issue #35). Migration
   `0011_banter.sql` introduces `banter_messages` + `banter_replies` (cascade on
   parent delete) with RLS via `is_league_member` + new

@@ -8,7 +8,7 @@ export default async function Home() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (user) redirect("/leagues");
+  if (user) redirect("/today");
 
   return (
     <main className="flex-1 flex flex-col">

@@ -19,9 +19,20 @@ in `components/stats/`.
 - `personality.test.ts` — vitest unit tests for the pure helpers (the math runs without a DB).
 - `group-picks.ts` — `loadGroupStagePicks(userIds)`: every GROUP match + each given
   user's 1X2 pick per match (RLS-scoped), feeding the profile "Group-stage picks"
-  board and `/compare`. Pure helpers `pickOutcome()` (correct/wrong/pending),
-  `tallyPickRecord()` (made/decided/correct), `groupMatchesByLetter()`.
+  board, `/compare`, and `/today`. The pure helpers + types live in
+  `picks-shared.ts` and are re-exported here for back-compat.
+- `picks-shared.ts` — **IO-free, client-safe** half of group-picks: the
+  `GroupPickMatch`/`VisiblePick` types and `pickOutcome()` / `tallyPickRecord()` /
+  `groupMatchesByLetter()`. Split out because the loader imports `supabaseServer()`
+  (→ next/headers), which poisons client bundles — client components (e.g.
+  `components/today/TodayBoard.tsx`) import from here, never from `group-picks.ts`.
 - `group-picks.test.ts` — vitest unit tests for those pure helpers.
+- `league-pulse.ts` — **IO-free, client-safe** math for the `/today` "League pulse":
+  `tallyMatchPicks()` (per-match home/draw/away split), `rankAgreement()` (viewer vs
+  each league-mate same-call counts — twins & opposites, sorted most-alike first),
+  `recentForm()` (decided-pick ✓/✗ sequence + current streak). All take the
+  RLS-scoped `picksByUser` shape from `loadGroupStagePicks`.
+- `league-pulse.test.ts` — vitest unit tests for those helpers.
 
 ## Conventions
 - Use `supabaseServer()` (RLS-aware, acts as the viewer) — **never** `supabaseService()`.
@@ -57,6 +68,11 @@ in `components/stats/`.
   the stat to `null`.
 
 ## Recent changes
+- 2026-06-12: Split the pure half of `group-picks.ts` into the client-safe
+  `picks-shared.ts` (re-exported for back-compat — no import sites broke) and added
+  `league-pulse.ts` + `league-pulse.test.ts` (`tallyMatchPicks` / `rankAgreement` /
+  `recentForm`) for the new `/today` start page. Both new modules are IO-free;
+  the loader and its RLS posture are unchanged.
 - 2026-06-12: Added `group-picks.ts` + `group-picks.test.ts` — RLS-aware loader for the
   full group-stage picks board (profile page) and the `/compare` head-to-head, with
   pure tested helpers (`pickOutcome` / `tallyPickRecord` / `groupMatchesByLetter`).
