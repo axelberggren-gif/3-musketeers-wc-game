@@ -13,6 +13,7 @@
     "agent:backfill": "node analytics/scripts/backfill.mjs",
     "agent:report": "node analytics/scripts/report.mjs",
     "agent:evals": "node analytics/scripts/correction-to-eval.mjs",
+    "agent:dream": "node analytics/scripts/dream.mjs",
     "prepare": "husky"
   },
   "dependencies": {

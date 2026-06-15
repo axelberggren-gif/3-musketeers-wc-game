@@ -17,6 +17,8 @@ npm run agent:report                 # four-quadrant report (fresh, from git his
 npm run agent:report -- --since 2026-05-01
 npm run agent:backfill               # write the event snapshot → analytics/events/log.ndjson
 npm run agent:evals                  # draft eval-case stubs from corrections (stdout)
+npm run agent:dream                  # consolidate memory (the local "dream") → Markdown proposal
+npm run agent:dream -- --focus scoring --engine heuristic
 ```
 
 Add `-- --no-github` to force git-only (default tries `gh` enrichment when available). In CI,
@@ -31,13 +33,23 @@ git log --first-parent + GitHub (PRs/reviews/CI/labels) + CHANGELOG
    events  ── backfill.mjs ─▶ events/log.ndjson (committed snapshot)
         │
         ├─ report.mjs            ─▶ four-quadrant report  (Prompt 03)
-        └─ correction-to-eval.mjs ─▶ eval stubs ─▶ prompts/02 ─▶ evals/cases/*.json (Prompt 02)
+        ├─ correction-to-eval.mjs ─▶ eval stubs ─▶ prompts/02 ─▶ evals/cases/*.json (Prompt 02)
+        └─ dream.mjs  +  the memory store (CLAUDE.md corpus + evals/cases) ─▶ consolidation
+                         proposal: Merge / Replace / Surface  (Prompt 04)
 ```
 
 - **Backfill** = recompute from full history anytime.
 - **Live** = the `agent-analytics` GitHub Action recomputes and upserts a tracking issue weekly
   and on every merged PR (it commits nothing — `main` is branch-protected).
 - **Eval loop** = corrections become regression tests under `evals/cases/`, validated by `npm test`.
+- **Dream** = the local analog of a Managed-Agents
+  [*dream*](https://platform.claude.com/docs/en/managed-agents/dreams). The pipeline above mines
+  *transcripts* (corrections); `dream.mjs` adds the *consolidation* pass — it reads the agents'
+  memory store (the `CLAUDE.md` canon + the eval suite) and proposes a reorganized memory
+  (duplicates merged, stale entries replaced, new insights surfaced). It's **read-only**: like a
+  real dream it never edits its inputs, so you adopt the parts you like (edit a CLAUDE.md, add an
+  eval) or discard it. `--engine` picks the deterministic heuristic, the paste-into-Claude prompt
+  bundle, or both; `--focus <area>` is the dream's `instructions` analog.
 
 See `prompts/01-instrument.md` for the event catalog and the path/label resolution rules.
 

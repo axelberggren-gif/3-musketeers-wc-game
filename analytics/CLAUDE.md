@@ -19,8 +19,9 @@ plain Node ESM scripts over git + GitHub history.
 - `scripts/backfill.mjs` — emit events from history (`npm run agent:backfill`).
 - `scripts/report.mjs` — the four-quadrant report (`npm run agent:report`), Markdown.
 - `scripts/correction-to-eval.mjs` — draft eval stubs from corrections (`npm run agent:evals`).
+- `scripts/dream.mjs` — the local *dream* analog (`npm run agent:dream`): reads the memory store (the `CLAUDE.md` corpus + `evals/cases/*.json`) + the mined correction signal and proposes a reorganized memory in MERGE / REPLACE / SURFACE buckets. Two engines in one pass (`--engine heuristic|prompt|both`): deterministic candidates + a ready-to-run consolidation prompt (prompts/04) with the packed "dream packet". Read-only — prints a proposal, edits nothing.
 - `scripts/hook-emit.mjs` — optional local-session telemetry (opt-in; see README).
-- `prompts/01..03` — the three adapted prompt-kit prompts.
+- `prompts/01..04` — the four adapted prompt-kit prompts (04 = dream consolidation).
 - `evals/validate.ts` + `evals/cases.test.ts` + `evals/cases/*.json` — the regression suite the correction loop feeds.
 - `events/log.ndjson` — committed snapshot (regenerate with `agent:backfill`); `events/local.ndjson` — gitignored local-hook sink.
 
@@ -50,4 +51,5 @@ plain Node ESM scripts over git + GitHub history.
   (squashed away) need gh enrichment. Word-bounded slug regex (so "debug" ≠ "bug").
 
 ## Recent changes
+- 2026-06-15: Added `scripts/dream.mjs` (`npm run agent:dream`) + `prompts/04-dream-consolidate.md` — a local analog of a Managed-Agents [*dream*](https://platform.claude.com/docs/en/managed-agents/dreams). Where the rest of the pipeline mines history into correction signal (the *transcript* half of a dream), this closes the loop with the *consolidation* half: it reads the repo's actual agent-memory store (the `CLAUDE.md` corpus + `evals/cases/*.json`) alongside that signal and proposes a reorganized memory in three dream-shaped buckets — **Merge** (duplicate eval cases by token Jaccard), **Replace** (stale/contradicted guidance: a covered workflow hit by a revert/critical correction, or a "Recent changes" list past the canon's ~10 cap), **Surface** (recurring uncaptured corrections → candidate invariant + eval). Two engines in one run (`--engine both|heuristic|prompt`): deterministic candidates + a paste-ready consolidation prompt with the packed "dream packet" (memory manifest + signal + heuristic candidates; `--inline` embeds full CLAUDE.md bodies). `--focus <area>` is the dream's `instructions` analog. **Read-only** — like a real dream it never edits its inputs; it prints a proposal to stdout to adopt or discard. Built-ins only, fail-safe, no new deps; reuses `collectEvents()`. No product/runtime/DB touch.
 - 2026-06-03: Initial agent-analytics tooling — backfill miner, four-quadrant report, eval-case loop (validator + suite + 3 seed cases from real corrections), three adapted prompts, and the `agent-analytics` GitHub Action (weekly + per-merge issue upsert, no commits). Local Claude Code hooks are opt-in (`hook-emit.mjs` + a snippet in README) since hooks don't run on the web.
