@@ -68,6 +68,13 @@ in `components/stats/`.
   the stat to `null`.
 
 ## Recent changes
+- 2026-06-15: `loadGroupStagePicks()` now **range-paginates** the `match_predictions`
+  fetch (ordered by `id`, 1000/page) instead of one unpaginated select. A big league
+  (~40 members × up to 48 group matches ≈ 1900 rows) exceeds PostgREST's default
+  1000-row cap, which silently truncated the result in arbitrary physical-row order —
+  members past the cap showed "No pick" on `/today` / the profile board / `/compare`
+  even though they'd picked. Same fix already used by `fetchAllPlayers` in
+  `app/(app)/predict/outcomes/page.tsx`. Pure helpers + RLS posture unchanged.
 - 2026-06-12: Split the pure half of `group-picks.ts` into the client-safe
   `picks-shared.ts` (re-exported for back-compat — no import sites broke) and added
   `league-pulse.ts` + `league-pulse.test.ts` (`tallyMatchPicks` / `rankAgreement` /
