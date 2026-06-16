@@ -1051,6 +1051,19 @@ export type Database = {
         Args: Record<PropertyKey, never>;
         Returns: string;
       };
+      get_global_standings: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          user_id: string | null;
+          username: string | null;
+          display_name: string | null;
+          match_points: number | null;
+          bracket_points: number | null;
+          tournament_points: number | null;
+          prop_points: number | null;
+          total_points: number | null;
+        }[];
+      };
       get_league_standings: {
         Args: { p_league_id: string };
         Returns: {
@@ -1202,3 +1215,17 @@ export type LeagueStandingsRow = {
   prop_points: number;
 };
 export type LeagueGroupBet = Tables<"league_group_bets">;
+// Non-null business shape for the portal-wide leaderboard RPC (mirrors
+// `LeagueStandingsRow` minus `league_id` — global standings span all leagues).
+// The generated `get_global_standings` Returns row is all-nullable (coalesced
+// aggregates the CLI can't introspect); cast at the boundary.
+export type GlobalStandingsRow = {
+  user_id: string;
+  username: string;
+  display_name: string | null;
+  total_points: number;
+  match_points: number;
+  bracket_points: number;
+  tournament_points: number;
+  prop_points: number;
+};
