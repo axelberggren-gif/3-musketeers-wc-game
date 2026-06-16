@@ -22,6 +22,7 @@ export async function Nav() {
     { href: "/predict/outcomes", label: "Outcomes" },
     { href: "/predict/bracket", label: "Bracket" },
     { href: "/leagues", label: "Leagues" },
+    { href: "/leaderboard", label: "Leaderboard" },
     ...(profile?.is_admin ? [{ href: "/admin", label: "Admin" }] : []),
   ];
 
