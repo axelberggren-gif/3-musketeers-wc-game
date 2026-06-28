@@ -17,7 +17,6 @@ import {
   qualSourceLabel,
   slotFriendlyName,
   upstreamSlots,
-  type GroupFinal,
 } from "@/lib/scoring/bracket-tree";
 import { POINTS, bracketPointsForSlot } from "@/lib/scoring/rules";
 
@@ -38,8 +37,8 @@ export interface BracketSlot {
 }
 
 export interface BracketMatchPair {
-  homeTeamId: string;
-  awayTeamId: string;
+  homeTeamId: string | null;
+  awayTeamId: string | null;
 }
 
 /**
@@ -63,19 +62,17 @@ interface Props {
   locked: boolean;
   /**
    * Real knockout match pairings keyed by `bracket_slot` (e.g. `R32-1`, `F`).
-   * Used for the R32 entry cells: once football-data lands a real R32 fixture the
-   * cell shows the two real teams to pick a winner from. Downstream cells never
-   * use this — their contestants are always the user's own upstream picks.
+   * Feeds the R32 entry cells: each side is filled with its real team as soon as
+   * football-data resolves it on the fixture (sides may resolve one at a time, so
+   * a side can be null while the other is set). A side that football-data hasn't
+   * filled yet shows the static group-qualification placeholder. football-data is
+   * authoritative — we never guess the team from group standings, because that
+   * guess can disagree with the real draw (no head-to-head tiebreak, and the
+   * qualification map's slot order differs from football-data's kickoff-ordered
+   * slotting) and would place a team in the wrong slot. Downstream cells never use
+   * this — their contestants are always the user's own upstream picks.
    */
   slotMatches: Record<string, BracketMatchPair>;
-  /**
-   * Real final group standings (winner / runner-up) per completed group, keyed
-   * by group letter. Feeds the R32 entry cells: each R32 side is a group
-   * qualification slot (Winner/Runner-up/3rd of Group X per the official
-   * schedule) and resolves to a real team once its group is fully played. Sides
-   * that aren't decided yet show the qualification placeholder instead.
-   */
-  groupFinals: Record<string, GroupFinal>;
   /** Real results per slot, used to score the bracket in live mode. */
   results: Record<string, SlotResult>;
 }
@@ -168,44 +165,32 @@ type Contestant =
 interface ResolveCtx {
   picks: Record<string, string | null>;
   slotMatches: Record<string, BracketMatchPair>;
-  groupFinals: Record<string, GroupFinal>;
   teamById: Record<string, BracketTeam>;
 }
 
-// Resolve one R32 group-qualification side to a real team once its group is
-// played, else return null (caller renders the placeholder label). Third-place
-// sides never resolve here — only the imported real fixture fills them.
-function resolveQualTeam(slot: string, idx: 0 | 1, ctx: ResolveCtx): string | null {
-  const src = R32_QUALIFIERS[slot]?.[idx];
-  if (!src) return null;
-  if (src.kind === "third") return null;
-  const final = ctx.groupFinals[src.group];
-  if (!final?.complete) return null;
-  return src.kind === "winner" ? final.winnerTeamId : final.runnerUpTeamId;
-}
-
-// The two (or one, for W) contestants of a slot. R32 prefers the imported real
-// fixture; otherwise each side resolves from its group qualification slot
-// (real group standings) and falls back to the qualification placeholder. Every
-// other slot derives its contestants from the user's own upstream picks.
+// The two (or one, for W) contestants of a slot. R32 cells resolve each side
+// from the authoritative imported fixture as soon as football-data fills it
+// (sides resolve independently — one can be a real team while the other is
+// still pending); a side football-data hasn't filled shows its static
+// group-qualification placeholder. We never guess the team from group standings:
+// the qualification map's slot order doesn't line up with football-data's
+// kickoff-ordered slotting, so a guess can land a team in the wrong slot and
+// duplicate one already placed by a real fixture elsewhere. Every other slot
+// derives its contestants from the user's own upstream picks.
 function contestantsFor(slot: string, ctx: ResolveCtx): Contestant[] {
   const stage = stageOf(slot);
   if (stage === "R32") {
     const m = ctx.slotMatches[slot];
-    if (m) {
-      return [
-        { kind: "team", teamId: m.homeTeamId },
-        { kind: "team", teamId: m.awayTeamId },
-      ];
-    }
     const sources = R32_QUALIFIERS[slot];
-    if (!sources) return [];
-    return sources.map((src, i): Contestant => {
-      const teamId = resolveQualTeam(slot, i as 0 | 1, ctx);
-      return teamId
+    const side = (teamId: string | null | undefined, idx: 0 | 1): Contestant | null =>
+      teamId
         ? { kind: "team", teamId }
-        : { kind: "qualifier", label: qualSourceLabel(src) };
-    });
+        : sources
+          ? { kind: "qualifier", label: qualSourceLabel(sources[idx]) }
+          : null;
+    return [side(m?.homeTeamId, 0), side(m?.awayTeamId, 1)].filter(
+      (c): c is Contestant => c !== null,
+    );
   }
   if (slot === "W") {
     const f = ctx.picks["F"];
@@ -267,7 +252,6 @@ export function BracketBuilder({
   initial,
   locked,
   slotMatches,
-  groupFinals,
   results,
 }: Props) {
   const [picks, setPicks] = useState<Record<string, string | null>>(initial);
@@ -287,8 +271,8 @@ export function BracketBuilder({
   }, [slots]);
 
   const ctx: ResolveCtx = useMemo(
-    () => ({ picks, slotMatches, groupFinals, teamById }),
-    [picks, slotMatches, groupFinals, teamById],
+    () => ({ picks, slotMatches, teamById }),
+    [picks, slotMatches, teamById],
   );
 
   const applyPick = useCallback(

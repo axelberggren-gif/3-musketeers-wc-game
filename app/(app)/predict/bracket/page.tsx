@@ -9,7 +9,6 @@ import {
   type SlotResult,
 } from "@/components/predict/BracketBuilder";
 import { CountdownBanner } from "@/components/predict/CountdownBanner";
-import { computeGroupFinals, type RealGroupMatch } from "@/lib/scoring/bracket-tree";
 
 const KNOCKOUT_STAGES = ["R32", "R16", "QF", "SF", "F"] as const;
 
@@ -20,7 +19,7 @@ export default async function BracketPage() {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const [tournamentRes, teamsRes, picksRes, knockoutMatchesRes, groupMatchesRes] =
+  const [tournamentRes, teamsRes, picksRes, knockoutMatchesRes] =
     await Promise.all([
       supabase.from("tournament").select("*").single(),
       supabase
@@ -32,13 +31,6 @@ export default async function BracketPage() {
         .from("matches")
         .select("bracket_slot, home_team_id, away_team_id, status, winner, home_score, away_score")
         .in("stage", KNOCKOUT_STAGES),
-      // Group-stage results feed the R32 entry cells: once a group is fully
-      // played we resolve its winner / runner-up into the matching qualification
-      // slot. Third-place slots are filled by the imported real R32 fixture.
-      supabase
-        .from("matches")
-        .select("group_letter, home_team_id, away_team_id, status, home_score, away_score")
-        .eq("stage", "GROUP"),
     ]);
 
   const tournament = tournamentRes.data;
@@ -50,14 +42,16 @@ export default async function BracketPage() {
 
   // Real knockout matches (once football-data lands them via syncFixtures()).
   // `slotMatches` feeds the R32 entry cells their real pairing; `results` feeds
-  // the live-scored mode (winner + scoreline + status) per slot. Only slots with
-  // both team_ids set become a real R32 pairing — placeholder R16+ rows with NULL
-  // teams fall through to the upstream-derived bracket cells.
+  // the live-scored mode (winner + scoreline + status) per slot. football-data
+  // resolves the two sides of an R32 fixture independently as groups finish, so
+  // we record a slot as soon as *either* side has a team — the bracket fills each
+  // side from the real fixture and shows a placeholder for the side still NULL.
+  // (Placeholder R16+ rows with no teams simply contribute nothing.)
   const slotMatches: Record<string, BracketMatchPair> = {};
   const results: Record<string, SlotResult> = {};
   for (const m of knockoutMatchesRes.data ?? []) {
     if (!m.bracket_slot) continue;
-    if (m.home_team_id && m.away_team_id) {
+    if (m.home_team_id || m.away_team_id) {
       slotMatches[m.bracket_slot] = {
         homeTeamId: m.home_team_id,
         awayTeamId: m.away_team_id,
@@ -74,11 +68,6 @@ export default async function BracketPage() {
   }
   // The champion (`W`) is scored off the Final match.
   if (results["F"]) results["W"] = results["F"];
-
-  // Real group winners / runners-up per completed group, for the R32 cells.
-  const groupFinals = computeGroupFinals(
-    (groupMatchesRes.data ?? []) as unknown as RealGroupMatch[],
-  );
 
   const slots = buildSlotDefs();
 
@@ -113,7 +102,6 @@ export default async function BracketPage() {
         initial={initial}
         locked={locks.round2Locked}
         slotMatches={slotMatches}
-        groupFinals={groupFinals}
         results={results}
       />
     </main>
