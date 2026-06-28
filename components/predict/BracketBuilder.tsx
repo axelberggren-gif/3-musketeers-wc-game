@@ -13,8 +13,6 @@ import { clearBracketPicks, setBracketPick } from "@/lib/predictions/actions";
 import { CountryFlag } from "@/components/CountryFlag";
 import {
   BRACKET_UPSTREAM,
-  R32_QUALIFIERS,
-  qualSourceLabel,
   slotFriendlyName,
   upstreamSlots,
 } from "@/lib/scoring/bracket-tree";
@@ -65,7 +63,7 @@ interface Props {
    * Feeds the R32 entry cells: each side is filled with its real team as soon as
    * football-data resolves it on the fixture (sides may resolve one at a time, so
    * a side can be null while the other is set). A side that football-data hasn't
-   * filled yet shows the static group-qualification placeholder. football-data is
+   * filled yet shows a neutral "To be decided" placeholder. football-data is
    * authoritative — we never guess the team from group standings, because that
    * guess can disagree with the real draw (no head-to-head tiebreak, and the
    * qualification map's slot order differs from football-data's kickoff-ordered
@@ -155,8 +153,8 @@ const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffec
 
 // ── Contestant + feeder-label resolution ────────────────────────────────────
 // A slot's side is either a known team, a downstream feeder still waiting on the
-// user's upstream pick ("Winner of Quarter-final 1"), or — for R32 entry cells —
-// a group qualification slot not yet resolved ("Runner-up Group K").
+// user's upstream pick ("Winner of Quarter-final 1"), or — for an R32 entry cell
+// side football-data hasn't resolved yet — a neutral placeholder ("To be decided").
 type Contestant =
   | { kind: "team"; teamId: string }
   | { kind: "feeder"; from: string }
@@ -171,26 +169,21 @@ interface ResolveCtx {
 // The two (or one, for W) contestants of a slot. R32 cells resolve each side
 // from the authoritative imported fixture as soon as football-data fills it
 // (sides resolve independently — one can be a real team while the other is
-// still pending); a side football-data hasn't filled shows its static
-// group-qualification placeholder. We never guess the team from group standings:
-// the qualification map's slot order doesn't line up with football-data's
-// kickoff-ordered slotting, so a guess can land a team in the wrong slot and
-// duplicate one already placed by a real fixture elsewhere. Every other slot
-// derives its contestants from the user's own upstream picks.
+// still pending); a side football-data hasn't filled shows a neutral
+// "To be decided" placeholder. We deliberately do NOT label it with a group
+// qualification source (Winner/Runner-up/3rd of Group X): the `R32_QUALIFIERS`
+// map's slot numbering follows FIFA's "Matches 73–88" order while
+// `deriveBracketSlot()` assigns `bracket_slot` by kickoff order, so the two
+// don't line up and the source would routinely be wrong (the same misalignment
+// that, when used to guess a team, duplicated one across slots). Every other
+// slot derives its contestants from the user's own upstream picks.
 function contestantsFor(slot: string, ctx: ResolveCtx): Contestant[] {
   const stage = stageOf(slot);
   if (stage === "R32") {
     const m = ctx.slotMatches[slot];
-    const sources = R32_QUALIFIERS[slot];
-    const side = (teamId: string | null | undefined, idx: 0 | 1): Contestant | null =>
-      teamId
-        ? { kind: "team", teamId }
-        : sources
-          ? { kind: "qualifier", label: qualSourceLabel(sources[idx]) }
-          : null;
-    return [side(m?.homeTeamId, 0), side(m?.awayTeamId, 1)].filter(
-      (c): c is Contestant => c !== null,
-    );
+    const side = (teamId: string | null | undefined): Contestant =>
+      teamId ? { kind: "team", teamId } : { kind: "qualifier", label: "To be decided" };
+    return [side(m?.homeTeamId), side(m?.awayTeamId)];
   }
   if (slot === "W") {
     const f = ctx.picks["F"];
@@ -207,8 +200,8 @@ function teamCode(teamById: Record<string, BracketTeam>, id: string): string {
 }
 
 // The placeholder text for a not-yet-known side: downstream cells name the
-// feeding round ("Winner of Quarter-final 1"); R32 cells show the group
-// qualification slot ("Runner-up Group K", "3rd Group A/B/C/D/F").
+// feeding round ("Winner of Quarter-final 1"); an unresolved R32 side shows the
+// neutral label carried on the qualifier contestant ("To be decided").
 function pendingLabelFor(c: Extract<Contestant, { kind: "feeder" | "qualifier" }>): string {
   return c.kind === "feeder" ? `Winner of ${slotFriendlyName(c.from)}` : c.label;
 }
@@ -497,7 +490,7 @@ export function BracketBuilder({
 
 // ── A single match cell: two stacked team-lines (+ scored footer in live mode).
 //    Sides that aren't known yet render their placeholder (downstream feeder
-//    "Winner of Quarter-final 1", or an R32 group qualification slot). ─────────
+//    "Winner of Quarter-final 1", or an unresolved R32 side "To be decided"). ──
 function MatchCell({
   slot,
   ctx,
