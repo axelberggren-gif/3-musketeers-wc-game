@@ -78,18 +78,24 @@ interface Props {
 const STAGE_ORDER: BracketStage[] = ["R32", "R16", "QF", "SF", "F", "W"];
 
 // Symmetric wall-chart halves: the left draw flows rightward into the Final,
-// the right draw flows leftward. Mirrors lib/scoring/bracket-tree's slot graph.
+// the right draw flows leftward. The slots are ordered top→bottom so each
+// downstream cell lands centred between its two real feeders per
+// `BRACKET_UPSTREAM` (the FIFA bracket pairs non-adjacent kickoff-ordered
+// slots, so this is NOT a plain 1..16 / 1..8 sequence). Left half feeds SF-A
+// (QF-A + QF-B); right half feeds SF-B (QF-C + QF-D).
 const LEFT = {
-  R32: ["R32-1", "R32-2", "R32-3", "R32-4", "R32-5", "R32-6", "R32-7", "R32-8"],
-  R16: ["R16-1", "R16-2", "R16-3", "R16-4"],
-  QF: ["QF-A", "QF-B"],
+  // R16-1[R32-2,5] · R16-2[R32-1,3] · R16-5[R32-11,12] · R16-6[R32-9,10]
+  R32: ["R32-2", "R32-5", "R32-1", "R32-3", "R32-11", "R32-12", "R32-9", "R32-10"],
+  R16: ["R16-1", "R16-2", "R16-5", "R16-6"], // QF-A[R16-1,2] · QF-B[R16-5,6]
+  QF: ["QF-A", "QF-B"], // SF-A
   SF: ["SF-A"],
 } as const;
 const RIGHT = {
   SF: ["SF-B"],
-  QF: ["QF-C", "QF-D"],
-  R16: ["R16-5", "R16-6", "R16-7", "R16-8"],
-  R32: ["R32-9", "R32-10", "R32-11", "R32-12", "R32-13", "R32-14", "R32-15", "R32-16"],
+  QF: ["QF-C", "QF-D"], // QF-C[R16-3,4] · QF-D[R16-7,8]
+  R16: ["R16-3", "R16-4", "R16-7", "R16-8"],
+  // R16-3[R32-4,6] · R16-4[R32-7,8] · R16-7[R32-14,16] · R16-8[R32-13,15]
+  R32: ["R32-4", "R32-6", "R32-7", "R32-8", "R32-14", "R32-16", "R32-13", "R32-15"],
 } as const;
 
 const STAGE_PTS: Record<BracketStage, number> = {

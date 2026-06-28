@@ -1,21 +1,37 @@
 import type { Pick1X2 } from "@/lib/supabase/types";
 
+// Which slots feed each knockout slot, per FIFA's official WC 2026 bracket.
+//
+// Our slots are assigned by KICKOFF ORDER (see `deriveBracketSlot()` in
+// lib/football-data/client.ts): R32-1..16 = Matches 73..88, R16-1..8 =
+// Matches 89..96, QF-A..D = Matches 97..100, SF-A/B = Matches 101/102,
+// F = Match 104 — all in schedule (match-number) order. The official bracket
+// does NOT pair adjacent matches (e.g. M89 = Winner M74 vs Winner M77, not
+// M73 vs M74), so this map must encode the real feeds, not the naive
+// "R32-(2N-1) + R32-2N → R16-N" assumption (which produced impossible R16
+// meetings like the two sides of one half facing each other).
+//
+// Source: FIFA / Wikipedia "2026 FIFA World Cup knockout stage" match grid.
+//   R16: M89=W74,W77 · M90=W73,W75 · M91=W76,W78 · M92=W79,W80
+//        M93=W83,W84 · M94=W81,W82 · M95=W86,W88 · M96=W85,W87
+//   QF:  M97=W89,W90 · M98=W93,W94 · M99=W91,W92 · M100=W95,W96
+//   SF:  M101=W97,W98 · M102=W99,W100   F: M104=W101,W102
 export const BRACKET_UPSTREAM: Record<string, readonly string[]> = {
-  "R16-1": ["R32-1", "R32-2"],
-  "R16-2": ["R32-3", "R32-4"],
-  "R16-3": ["R32-5", "R32-6"],
-  "R16-4": ["R32-7", "R32-8"],
-  "R16-5": ["R32-9", "R32-10"],
-  "R16-6": ["R32-11", "R32-12"],
-  "R16-7": ["R32-13", "R32-14"],
-  "R16-8": ["R32-15", "R32-16"],
-  "QF-A": ["R16-1", "R16-2"],
-  "QF-B": ["R16-3", "R16-4"],
-  "QF-C": ["R16-5", "R16-6"],
-  "QF-D": ["R16-7", "R16-8"],
-  "SF-A": ["QF-A", "QF-B"],
-  "SF-B": ["QF-C", "QF-D"],
-  F: ["SF-A", "SF-B"],
+  "R16-1": ["R32-2", "R32-5"], // M89: W74 vs W77
+  "R16-2": ["R32-1", "R32-3"], // M90: W73 vs W75
+  "R16-3": ["R32-4", "R32-6"], // M91: W76 vs W78
+  "R16-4": ["R32-7", "R32-8"], // M92: W79 vs W80
+  "R16-5": ["R32-11", "R32-12"], // M93: W83 vs W84
+  "R16-6": ["R32-9", "R32-10"], // M94: W81 vs W82
+  "R16-7": ["R32-14", "R32-16"], // M95: W86 vs W88
+  "R16-8": ["R32-13", "R32-15"], // M96: W85 vs W87
+  "QF-A": ["R16-1", "R16-2"], // M97: W89 vs W90
+  "QF-B": ["R16-5", "R16-6"], // M98: W93 vs W94
+  "QF-C": ["R16-3", "R16-4"], // M99: W91 vs W92
+  "QF-D": ["R16-7", "R16-8"], // M100: W95 vs W96
+  "SF-A": ["QF-A", "QF-B"], // M101: W97 vs W98
+  "SF-B": ["QF-C", "QF-D"], // M102: W99 vs W100
+  F: ["SF-A", "SF-B"], // M104: W101 vs W102
   W: ["F"],
 } as const;
 

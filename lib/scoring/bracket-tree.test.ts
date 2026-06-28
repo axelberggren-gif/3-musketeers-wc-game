@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  BRACKET_UPSTREAM,
   upstreamSlots,
   predictedGroupStandings,
   suggestR32Qualifiers,
@@ -18,14 +19,25 @@ describe("upstreamSlots", () => {
     expect(upstreamSlots("R32-16")).toEqual([]);
   });
 
-  it("R16-N feeds from R32-(2N-1) and R32-2N", () => {
-    expect(upstreamSlots("R16-1")).toEqual(["R32-1", "R32-2"]);
-    expect(upstreamSlots("R16-8")).toEqual(["R32-15", "R32-16"]);
+  // The official WC 2026 bracket pairs NON-adjacent kickoff-ordered R32 slots
+  // into each R16 match (slots = Matches 73..88; R16-n = Match 88+n). See the
+  // BRACKET_UPSTREAM comment for the source grid.
+  it("R16 feeds match the official FIFA WC 2026 bracket", () => {
+    expect(upstreamSlots("R16-1")).toEqual(["R32-2", "R32-5"]); // M89: W74 vs W77
+    expect(upstreamSlots("R16-2")).toEqual(["R32-1", "R32-3"]); // M90: W73 vs W75
+    expect(upstreamSlots("R16-3")).toEqual(["R32-4", "R32-6"]); // M91: W76 vs W78
+    expect(upstreamSlots("R16-4")).toEqual(["R32-7", "R32-8"]); // M92: W79 vs W80
+    expect(upstreamSlots("R16-5")).toEqual(["R32-11", "R32-12"]); // M93: W83 vs W84
+    expect(upstreamSlots("R16-6")).toEqual(["R32-9", "R32-10"]); // M94: W81 vs W82
+    expect(upstreamSlots("R16-7")).toEqual(["R32-14", "R32-16"]); // M95: W86 vs W88
+    expect(upstreamSlots("R16-8")).toEqual(["R32-13", "R32-15"]); // M96: W85 vs W87
   });
 
-  it("QF-A..D pair adjacent R16 slots", () => {
-    expect(upstreamSlots("QF-A")).toEqual(["R16-1", "R16-2"]);
-    expect(upstreamSlots("QF-D")).toEqual(["R16-7", "R16-8"]);
+  it("QF feeds match the official FIFA WC 2026 bracket", () => {
+    expect(upstreamSlots("QF-A")).toEqual(["R16-1", "R16-2"]); // M97
+    expect(upstreamSlots("QF-B")).toEqual(["R16-5", "R16-6"]); // M98
+    expect(upstreamSlots("QF-C")).toEqual(["R16-3", "R16-4"]); // M99
+    expect(upstreamSlots("QF-D")).toEqual(["R16-7", "R16-8"]); // M100
   });
 
   it("SF/F/W chain through", () => {
@@ -33,6 +45,25 @@ describe("upstreamSlots", () => {
     expect(upstreamSlots("SF-B")).toEqual(["QF-C", "QF-D"]);
     expect(upstreamSlots("F")).toEqual(["SF-A", "SF-B"]);
     expect(upstreamSlots("W")).toEqual(["F"]);
+  });
+
+  // Guard the property that makes the bug ("Norway vs France in the R16")
+  // impossible: every team that can reach a given slot does so through exactly
+  // one path, and the two halves of the draw only meet in the Final.
+  it("no R32 slot feeds two different R16 slots (each match has one downstream)", () => {
+    const downstreamCount = new Map<string, number>();
+    for (const ups of Object.values(BRACKET_UPSTREAM)) {
+      for (const up of ups) downstreamCount.set(up, (downstreamCount.get(up) ?? 0) + 1);
+    }
+    for (let i = 1; i <= 16; i++) expect(downstreamCount.get(`R32-${i}`)).toBe(1);
+  });
+
+  it("each R16 slot's two feeders are distinct and every R32 slot is used once", () => {
+    const allFeeders = [
+      ...Array.from({ length: 8 }, (_, i) => upstreamSlots(`R16-${i + 1}`)),
+    ].flat();
+    expect(new Set(allFeeders).size).toBe(16); // all distinct
+    for (let i = 1; i <= 16; i++) expect(allFeeders).toContain(`R32-${i}`);
   });
 });
 
