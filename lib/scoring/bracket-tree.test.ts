@@ -2,6 +2,9 @@ import { describe, it, expect } from "vitest";
 import {
   BRACKET_UPSTREAM,
   upstreamSlots,
+  knockoutSlotByFeeders,
+  r32SlotForMatchup,
+  R32_MATCHUP_SLOT,
   predictedGroupStandings,
   suggestR32Qualifiers,
   filterSuggestionsByMatchPairs,
@@ -304,5 +307,73 @@ describe("computeGroupFinals", () => {
     // 3 pts each; GD: x +2, z 0, y -2 → x wins on goal difference
     expect(finals.A.complete).toBe(true);
     expect(finals.A.winnerTeamId).toBe("x");
+  });
+});
+
+describe("knockoutSlotByFeeders", () => {
+  it("inverts BRACKET_UPSTREAM to the canonical R16 slot (order-independent)", () => {
+    expect(knockoutSlotByFeeders("R32-2", "R32-5")).toBe("R16-1");
+    expect(knockoutSlotByFeeders("R32-5", "R32-2")).toBe("R16-1"); // order ignored
+    expect(knockoutSlotByFeeders("R32-1", "R32-3")).toBe("R16-2");
+    expect(knockoutSlotByFeeders("R32-13", "R32-15")).toBe("R16-8");
+  });
+
+  it("resolves QF and SF slots from their feeders", () => {
+    expect(knockoutSlotByFeeders("R16-1", "R16-2")).toBe("QF-A");
+    expect(knockoutSlotByFeeders("R16-7", "R16-8")).toBe("QF-D");
+    expect(knockoutSlotByFeeders("QF-A", "QF-B")).toBe("SF-A");
+    expect(knockoutSlotByFeeders("QF-C", "QF-D")).toBe("SF-B");
+  });
+
+  it("returns null for a pair that feeds no slot", () => {
+    expect(knockoutSlotByFeeders("R32-1", "R32-2")).toBeNull(); // not a real feed pair
+    expect(knockoutSlotByFeeders("R16-1", "R16-8")).toBeNull();
+    expect(knockoutSlotByFeeders("QF-A", "QF-C")).toBeNull();
+  });
+
+  it("round-trips every multi-feeder slot through its own feeders", () => {
+    for (const [slot, ups] of Object.entries(BRACKET_UPSTREAM)) {
+      if (ups.length === 2) {
+        expect(knockoutSlotByFeeders(ups[0], ups[1])).toBe(slot);
+      }
+    }
+  });
+});
+
+describe("r32SlotForMatchup", () => {
+  it("pins the France–Sweden tie to R32-5 and Netherlands–Morocco to R32-3", () => {
+    // The bug was these landing in the same R16; correct slots put them in
+    // different R16s (R32-5 → R16-1, R32-3 → R16-2), meeting earliest in the QF.
+    expect(r32SlotForMatchup("FRA", "SWE")).toBe("R32-5");
+    expect(r32SlotForMatchup("NED", "MAR")).toBe("R32-3");
+    expect(knockoutSlotByFeeders("R32-2", "R32-5")).toBe("R16-1"); // France's R16
+    expect(knockoutSlotByFeeders("R32-1", "R32-3")).toBe("R16-2"); // Morocco's R16
+  });
+
+  it("is order-independent", () => {
+    expect(r32SlotForMatchup("SWE", "FRA")).toBe("R32-5");
+    expect(r32SlotForMatchup("CAN", "RSA")).toBe(r32SlotForMatchup("RSA", "CAN"));
+  });
+
+  it("returns null for unknown / partial matchups", () => {
+    expect(r32SlotForMatchup("FRA", "BRA")).toBeNull(); // not a real R32 tie
+    expect(r32SlotForMatchup("FRA", null)).toBeNull();
+    expect(r32SlotForMatchup(null, null)).toBeNull();
+  });
+
+  it("maps all 16 ties to a unique R32-1..16 slot", () => {
+    const slots = Object.values(R32_MATCHUP_SLOT);
+    expect(slots).toHaveLength(16);
+    expect(new Set(slots).size).toBe(16); // no duplicate slots
+    expect(new Set(slots)).toEqual(
+      new Set(Array.from({ length: 16 }, (_, i) => `R32-${i + 1}`)),
+    );
+  });
+
+  it("keys are stored as sorted code pairs", () => {
+    for (const key of Object.keys(R32_MATCHUP_SLOT)) {
+      const [a, b] = key.split("/");
+      expect([a, b]).toEqual([a, b].sort());
+    }
   });
 });

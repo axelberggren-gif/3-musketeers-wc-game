@@ -2,12 +2,12 @@ import { supabaseService } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/types";
 import {
   FootballDataClient,
-  deriveBracketSlot,
   mapStage,
   mapStatus,
   resolveWinner,
   type FdMatch,
 } from "./client";
+import { knockoutSlotByFeeders, r32SlotForMatchup } from "@/lib/scoring/bracket-tree";
 
 const SOURCE = "football-data.org";
 
@@ -343,9 +343,18 @@ async function drainPendingMatchDetails(
   return synced;
 }
 
-// Assign bracket_slot deterministically per knockout stage by kickoff order.
-// FIFA's schedule is fixed once the draw is set, so the first R16 match by
-// kickoff is always R16-1, the first QF is QF-A, etc.
+// Assign bracket_slot to each knockout match by FIFA bracket position — NOT by
+// kickoff order. football-data schedules the R32 (and, tightly, the R16)
+// kickoffs in an order that does not match FIFA's bracket numbering, and match
+// `external_id` order isn't FIFA order either, so a kickoff/id sort mis-pairs
+// teams (e.g. France and Morocco landing in the same Round of 16). Instead:
+//   * R32 — pinned to its FIFA slot by the realised matchup (R32_MATCHUP_SLOT).
+//   * R16/QF/SF — derived from lineage: each match is the slot whose two feeder
+//     slots' winners are its two contestants (knockoutSlotByFeeders). Resolvable
+//     only once the feeder matches are FINISHED with a winner; until then the
+//     match is left unslotted (its slot isn't needed until it's scored, and the
+//     builder draws the tree from BRACKET_UPSTREAM, not these rows).
+//   * F / 3RD — unique per stage, assigned directly.
 function buildBracketSlotMap(matches: FdMatch[]): Map<number, string> {
   const byStage = new Map<string, FdMatch[]>();
   for (const m of matches) {
@@ -355,13 +364,44 @@ function buildBracketSlotMap(matches: FdMatch[]): Map<number, string> {
     arr.push(m);
     byStage.set(stage, arr);
   }
+
   const result = new Map<number, string>();
-  for (const [stage, group] of byStage.entries()) {
-    group.sort((a, b) => a.utcDate.localeCompare(b.utcDate));
-    group.forEach((m, idx) => {
-      const slot = deriveBracketSlot(stage as ReturnType<typeof mapStage>, idx);
-      if (slot) result.set(m.id, slot);
-    });
+
+  // Team external id → the slot whose match it won (built as we resolve rounds).
+  const slotWonByTeam = new Map<number, string>();
+  const winnerExternalId = (m: FdMatch): number | null => {
+    const w = resolveWinner(m);
+    if (w === "HOME") return m.homeTeam.id;
+    if (w === "AWAY") return m.awayTeam.id;
+    return null;
+  };
+  const assign = (m: FdMatch, slot: string) => {
+    result.set(m.id, slot);
+    const w = winnerExternalId(m);
+    if (w != null) slotWonByTeam.set(w, slot);
+  };
+
+  // R32: canonical matchup → slot (kickoff/id order is not FIFA bracket order).
+  for (const m of byStage.get("R32") ?? []) {
+    const slot = r32SlotForMatchup(m.homeTeam.tla, m.awayTeam.tla);
+    if (slot) assign(m, slot);
   }
+
+  // R16 → QF → SF, in dependency order: slot each match from the feeder slots
+  // its two contestants won. Skip until both feeders have resolved.
+  for (const stage of ["R16", "QF", "SF"] as const) {
+    for (const m of byStage.get(stage) ?? []) {
+      const a = m.homeTeam.id != null ? slotWonByTeam.get(m.homeTeam.id) : undefined;
+      const b = m.awayTeam.id != null ? slotWonByTeam.get(m.awayTeam.id) : undefined;
+      if (!a || !b) continue;
+      const slot = knockoutSlotByFeeders(a, b);
+      if (slot) assign(m, slot);
+    }
+  }
+
+  // Final + third-place play-off are the only match in their stage.
+  for (const m of byStage.get("F") ?? []) result.set(m.id, "F");
+  for (const m of byStage.get("3RD") ?? []) result.set(m.id, "3RD");
+
   return result;
 }

@@ -46,9 +46,16 @@ in `app/api/cron/` and from admin actions.
   `settle_group_stage_props` (per-group + first-eliminated props), and
   `refresh_league_standings` after upserting matches. Those functions live in
   migrations 0002, 0004 and 0005 — keep them in sync.
-- `syncFixtures()` derives `bracket_slot` per knockout match by sorting matches
-  within each stage by `utcDate` (R32-1..16 / R16-1..8 / QF-A..D / SF-A..B / F).
-  Without this, `score_bracket()` would never join.
+- `syncFixtures()` derives `bracket_slot` per knockout match by **FIFA bracket
+  position, NOT kickoff order** (`buildBracketSlotMap`). football-data schedules
+  the R32 (and tightly the R16) kickoffs in an order that does not match FIFA's
+  match numbering, and `external_id` order isn't FIFA order either, so sorting by
+  either mis-pairs teams. Instead: R32 is pinned by the realised matchup
+  (`R32_MATCHUP_SLOT` / `r32SlotForMatchup()` in `lib/scoring/bracket-tree.ts`),
+  R16/QF/SF are derived from lineage (`knockoutSlotByFeeders()` — the slot whose
+  two feeder slots' winners contest the match, resolved as results land), and
+  F/3RD are unique per stage. Without a correct `bracket_slot`, `score_bracket()`
+  would never join — and a wrong one mis-scores knockout picks.
 - `syncFixtures()` also drains up to **5 per-match detail fetches** per run via
   `drainPendingMatchDetails()`: any FINISHED match with `details_synced_at IS NULL`
   is hit on `/matches/{id}` to pick up goals + bookings, then marked. The 5-per-run
@@ -71,6 +78,7 @@ in `app/api/cron/` and from admin actions.
 
 ## Recent changes
 <!-- Newest first. Keep last 10. One line per entry. -->
+- 2026-06-29: `buildBracketSlotMap()` rewritten to slot knockout matches by **FIFA bracket position, not kickoff order**. The old version sorted each stage by `utcDate` and assigned R32-1..16 / R16-1..8 / … in that order, assuming football-data's kickoff order matches FIFA's match numbering — it doesn't (verified against live data: BRA/JPN = Match 76 kicks off before GER/PAR = M74, so 11 of 16 R32 ties were mis-slotted, scrambling the whole downstream tree → France vs Morocco in the R16). `external_id` order isn't FIFA order either, so neither sort works. Now: R32 pinned by realised matchup (`R32_MATCHUP_SLOT` / `r32SlotForMatchup()` in `lib/scoring/bracket-tree.ts`, verified vs the FIFA Matches 73–88 grid), R16/QF/SF derived from bracket lineage (`knockoutSlotByFeeders()` — the slot whose two feeder slots' winners contest the match, resolved once feeder results land), F/3RD by stage. `deriveBracketSlot()` is no longer used by `sync.ts` (kept + tested in `client.ts`). Per-slot `score_bracket()` is unchanged → no DB/migration/points-sync change; all knockout matches were still `SCHEDULED`, so nothing was mis-scored yet. Tests in `lib/scoring/bracket-tree.test.ts`.
 - 2026-06-11: `syncFixtures()` resolves a FINISHED match's winner from the `fullTime` scoreline when football-data leaves `score.winner` null. The bulk `/competitions/WC/matches` endpoint regularly reports a just-finished match as `status: "FINISHED"` with `fullTime` populated but `winner` still null for a window after FT, so the old `winner: mapWinner(m.score.winner)` stored the scoreline but left `winner` NULL — the match was never added to the score-this-run set and `score_match()` (which also early-returns on a null winner) awarded nobody (symptom: admin sync log `inserted=104 finished=0 scored=0 detailsSynced=1`). New `resolveWinner(m)` in `client.ts` falls back to `fullTime` for a FINISHED match with no `score.winner`; a level scoreline → `DRAW` only in the GROUP stage (a level knockout is decided by ET/penalties, reported via `score.winner`, so it stays null until the API fills it). `sync.ts` swapped `mapWinner` → `resolveWinner`. Self-heals on the next sync; tests in `client.test.ts`.
 - 2026-06-05: `syncScorers()` repurposed from an informational `/scorers` fetch (fed no scoring table) into a daily detail-drain + reconcile backstop: drains up to `SCORERS_DRAIN_LIMIT = 8` pending FINISHED-match details via `drainPendingMatchDetails()`, then re-runs `score_tournament()` + `refresh_league_standings`. Pairs with migration 0016, which gates `score_tournament()`'s top-scorer block and `score_troublemaker()` on `all_match_details_synced()` so those two categories never resolve on a partial drain backlog right after the Final (#83). Return shape changed to `{ detailsSynced, scored }`; `runSyncScorers()` admin action just spreads it. `fd.scorers()` / `FdScorer` are now unused by sync but kept in `client.ts`.
 - 2026-05-26: `FdMatch.stage` union gains `"LAST_32"` and `mapStage()` translates it to our new `R32` local stage (added in migration 0013). `deriveBracketSlot()` now mints `R32-1..R32-16` for first-knockout-round matches by kickoff order. `syncFixtures()` already calls `deriveBracketSlot()` generically so it picks up R32 without further edits. If football-data uses a different label than `LAST_32` for actual WC 2026 data, only this mapping needs updating — the DB enum value `R32` is the canonical local stage.

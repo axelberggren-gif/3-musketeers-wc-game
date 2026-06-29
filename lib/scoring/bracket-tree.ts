@@ -2,13 +2,15 @@ import type { Pick1X2 } from "@/lib/supabase/types";
 
 // Which slots feed each knockout slot, per FIFA's official WC 2026 bracket.
 //
-// Our slots are assigned by KICKOFF ORDER (see `deriveBracketSlot()` in
-// lib/football-data/client.ts): R32-1..16 = Matches 73..88, R16-1..8 =
-// Matches 89..96, QF-A..D = Matches 97..100, SF-A/B = Matches 101/102,
-// F = Match 104 — all in schedule (match-number) order. The official bracket
-// does NOT pair adjacent matches (e.g. M89 = Winner M74 vs Winner M77, not
-// M73 vs M74), so this map must encode the real feeds, not the naive
-// "R32-(2N-1) + R32-2N → R16-N" assumption (which produced impossible R16
+// Slots are numbered by FIFA MATCH NUMBER (R32-1..16 = Matches 73..88, R16-1..8
+// = Matches 89..96, QF-A..D = Matches 97..100, SF-A/B = Matches 101/102,
+// F = Match 104) — NOT by kickoff order. football-data's kickoff order (and
+// `external_id` order) does not match FIFA's numbering, so `syncFixtures()`
+// pins R32 by the realised matchup (`R32_MATCHUP_SLOT`) and derives R16/QF/SF
+// from lineage (`knockoutSlotByFeeders()`), never from a kickoff sort. The
+// official bracket does NOT pair adjacent matches (e.g. M89 = Winner M74 vs
+// Winner M77, not M73 vs M74), so this map encodes the real feeds, not the
+// naive "R32-(2N-1) + R32-2N → R16-N" assumption (which produced impossible R16
 // meetings like the two sides of one half facing each other).
 //
 // Source: FIFA / Wikipedia "2026 FIFA World Cup knockout stage" match grid.
@@ -37,6 +39,23 @@ export const BRACKET_UPSTREAM: Record<string, readonly string[]> = {
 
 export function upstreamSlots(slot: string): readonly string[] {
   return BRACKET_UPSTREAM[slot] ?? [];
+}
+
+// Invert BRACKET_UPSTREAM: given the two feeder slots whose winners contest a
+// knockout match, return that match's canonical slot (or null if no slot has
+// exactly those two feeders). Order-independent. Lets syncFixtures() slot
+// R16/QF/SF matches from the bracket *lineage* (which teams advanced from which
+// slots) instead of kickoff order — football-data schedules tightly-packed
+// rounds (R16 especially) in an order that does NOT match FIFA's bracket
+// numbering, so kickoff order mis-pairs them. 'F'/'3RD' are unique per stage and
+// assigned directly by syncFixtures(), not resolved here.
+export function knockoutSlotByFeeders(feederA: string, feederB: string): string | null {
+  const want = [feederA, feederB].sort().join("|");
+  for (const [slot, ups] of Object.entries(BRACKET_UPSTREAM)) {
+    if (ups.length !== 2) continue;
+    if ([...ups].sort().join("|") === want) return slot;
+  }
+  return null;
 }
 
 // ── Official WC 2026 Round-of-32 qualification map ──────────────────────────
@@ -77,6 +96,44 @@ export function qualSourceLabel(s: QualSource): string {
   if (s.kind === "winner") return `Winner Group ${s.group}`;
   if (s.kind === "runnerup") return `Runner-up Group ${s.group}`;
   return `3rd Group ${s.groups.join("/")}`;
+}
+
+// ── Canonical WC 2026 Round-of-32 matchup → bracket slot ────────────────────
+// The entry round (R32) CANNOT be slotted by kickoff order: football-data
+// schedules the 16 R32 kickoffs in an order that does not match FIFA's bracket
+// numbering (e.g. BRA/JPN — FIFA Match 76 — kicks off before GER/PAR — M74),
+// and match `external_id` order is likewise not FIFA order. Downstream rounds
+// then inherit the scramble through BRACKET_UPSTREAM, mis-pairing teams (the
+// France-vs-Morocco-in-the-Round-of-16 bug). So we pin each realised R32
+// matchup to its FIFA slot explicitly. Keyed on the two team codes
+// (football-data TLA / `teams.code`), sorted then joined with "/" so home/away
+// order is irrelevant. Verified against the official FIFA grid (Matches 73–88)
+// and the live imported fixtures. R16/QF/SF are then derived from results via
+// knockoutSlotByFeeders(); 'F'/'3RD' are unique per stage.
+export const R32_MATCHUP_SLOT: Record<string, string> = {
+  "CAN/RSA": "R32-1", // M73
+  "GER/PAR": "R32-2", // M74
+  "MAR/NED": "R32-3", // M75
+  "BRA/JPN": "R32-4", // M76
+  "FRA/SWE": "R32-5", // M77
+  "CIV/NOR": "R32-6", // M78
+  "ECU/MEX": "R32-7", // M79
+  "COD/ENG": "R32-8", // M80
+  "BIH/USA": "R32-9", // M81
+  "BEL/SEN": "R32-10", // M82
+  "CRO/POR": "R32-11", // M83
+  "AUT/ESP": "R32-12", // M84
+  "ALG/SUI": "R32-13", // M85
+  "ARG/CPV": "R32-14", // M86
+  "COL/GHA": "R32-15", // M87
+  "AUS/EGY": "R32-16", // M88
+};
+
+// Canonical R32 slot for a realised matchup, by the two team codes (any order).
+// Returns null if either side is unknown or the pair isn't a recognised R32 tie.
+export function r32SlotForMatchup(codeA: string | null, codeB: string | null): string | null {
+  if (!codeA || !codeB) return null;
+  return R32_MATCHUP_SLOT[[codeA, codeB].sort().join("/")] ?? null;
 }
 
 // Human round name + index for a knockout slot, used in "Winner of …" feeder
