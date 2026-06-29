@@ -2,13 +2,15 @@ import type { Pick1X2 } from "@/lib/supabase/types";
 
 // Which slots feed each knockout slot, per FIFA's official WC 2026 bracket.
 //
-// Our slots are assigned by KICKOFF ORDER (see `deriveBracketSlot()` in
-// lib/football-data/client.ts): R32-1..16 = Matches 73..88, R16-1..8 =
-// Matches 89..96, QF-A..D = Matches 97..100, SF-A/B = Matches 101/102,
-// F = Match 104 — all in schedule (match-number) order. The official bracket
-// does NOT pair adjacent matches (e.g. M89 = Winner M74 vs Winner M77, not
-// M73 vs M74), so this map must encode the real feeds, not the naive
-// "R32-(2N-1) + R32-2N → R16-N" assumption (which produced impossible R16
+// Slots are numbered by FIFA MATCH NUMBER (R32-1..16 = Matches 73..88, R16-1..8
+// = Matches 89..96, QF-A..D = Matches 97..100, SF-A/B = Matches 101/102,
+// F = Match 104) — NOT by kickoff order. football-data's kickoff order (and
+// `external_id` order) does not match FIFA's numbering, so `syncFixtures()`
+// pins R32 by the realised matchup (`R32_MATCHUP_SLOT`) and derives R16/QF/SF
+// from lineage (`knockoutSlotByFeeders()`), never from a kickoff sort. The
+// official bracket does NOT pair adjacent matches (e.g. M89 = Winner M74 vs
+// Winner M77, not M73 vs M74), so this map encodes the real feeds, not the
+// naive "R32-(2N-1) + R32-2N → R16-N" assumption (which produced impossible R16
 // meetings like the two sides of one half facing each other).
 //
 // Source: FIFA / Wikipedia "2026 FIFA World Cup knockout stage" match grid.
