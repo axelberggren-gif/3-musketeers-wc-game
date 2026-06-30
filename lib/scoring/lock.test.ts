@@ -32,6 +32,33 @@ describe("computeLockState", () => {
     expect(s.round2Locked).toBe(false);
     expect(s.firstKickoffAt.getTime()).toBe(0);
   });
+
+  // opts.round2Exempt — per-league bracket exemption (migration 0032).
+  it("forces round2Locked false when exempt, even past knockout start", () => {
+    const s = computeLockState(TOURNAMENT, new Date("2026-07-04T16:00:00Z"), {
+      round2Exempt: true,
+    });
+    expect(s.round1Locked).toBe(true);
+    expect(s.round2Locked).toBe(false);
+  });
+  it("keeps round2Locked true when not exempt past knockout start", () => {
+    const s = computeLockState(TOURNAMENT, new Date("2026-07-04T16:00:00Z"), {
+      round2Exempt: false,
+    });
+    expect(s.round2Locked).toBe(true);
+  });
+  it("leaves round 1 untouched by the round2Exempt flag", () => {
+    const s = computeLockState(TOURNAMENT, new Date("2026-06-11T20:00:00Z"), {
+      round2Exempt: true,
+    });
+    expect(s.round1Locked).toBe(true);
+    expect(s.round2Locked).toBe(false);
+  });
+  it("safe defaults still hold for a null tournament even when exempt", () => {
+    const s = computeLockState(null, new Date(), { round2Exempt: true });
+    expect(s.round1Locked).toBe(false);
+    expect(s.round2Locked).toBe(false);
+  });
 });
 
 describe("isLocked", () => {
