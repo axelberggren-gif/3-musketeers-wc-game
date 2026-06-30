@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { supabaseServer } from "@/lib/supabase/server";
 import { computeLockState } from "@/lib/scoring/lock";
+import { isRound2Exempt } from "@/lib/predictions/round2-access";
 import {
   PICK_REACTION_EMOJI,
   type PickKind,
@@ -23,6 +24,17 @@ async function getLocks() {
   const supabase = await supabaseServer();
   const { data } = await supabase.from("tournament").select("*").single();
   return computeLockState(data);
+}
+
+// Round-2 lock for a specific user: honours the per-league bracket exemption
+// (migration 0032) so a member of an opened-up league can still write bracket
+// picks past the global knockout lock — matching the DB `round2_locked_for()`
+// trigger. Used by the bracket write actions instead of the global getLocks().
+async function getBracketLocks(userId: string) {
+  const supabase = await supabaseServer();
+  const { data } = await supabase.from("tournament").select("*").single();
+  const round2Exempt = await isRound2Exempt(data, userId);
+  return computeLockState(data, undefined, { round2Exempt });
 }
 
 export async function setMatchPick(matchId: string, pick: Pick1X2 | null) {
@@ -198,7 +210,7 @@ export async function setPlayerProp(propKey: string, playerId: string | null) {
 
 export async function setBracketPick(slot: string, teamId: string) {
   const { supabase, user } = await authedClient();
-  const locks = await getLocks();
+  const locks = await getBracketLocks(user.id);
   if (locks.round2Locked) return { ok: false, error: "Round 2 bracket is locked." } as const;
   const { error } = await supabase
     .from("bracket_predictions")
@@ -213,7 +225,7 @@ export async function setBracketPick(slot: string, teamId: string) {
 export async function clearBracketPicks(slots: string[]) {
   if (slots.length === 0) return { ok: true } as const;
   const { supabase, user } = await authedClient();
-  const locks = await getLocks();
+  const locks = await getBracketLocks(user.id);
   if (locks.round2Locked) return { ok: false, error: "Round 2 bracket is locked." } as const;
   const { error } = await supabase
     .from("bracket_predictions")
@@ -228,7 +240,7 @@ export async function clearBracketPicks(slots: string[]) {
 export async function setBracketPicksBulk(picks: { slot: string; teamId: string }[]) {
   if (picks.length === 0) return { ok: true } as const;
   const { supabase, user } = await authedClient();
-  const locks = await getLocks();
+  const locks = await getBracketLocks(user.id);
   if (locks.round2Locked) return { ok: false, error: "Round 2 bracket is locked." } as const;
   const rows = picks.map((p) => ({
     user_id: user.id,
