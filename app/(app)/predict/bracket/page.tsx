@@ -1,5 +1,6 @@
 import { supabaseServer } from "@/lib/supabase/server";
 import { computeLockState } from "@/lib/scoring/lock";
+import { isRound2Exempt } from "@/lib/predictions/round2-access";
 import {
   BracketBuilder,
   type BracketMatchPair,
@@ -34,7 +35,15 @@ export default async function BracketPage() {
     ]);
 
   const tournament = tournamentRes.data;
-  const locks = computeLockState(tournament);
+  // Per-league bracket exemption (migration 0032): a member of a league listed in
+  // tournament.locked_overrides.round2_open_leagues keeps the bracket editable
+  // past the global knockout lock. `knockoutStarted` is the *global* lock state —
+  // used to hide the "locks in" countdown for exempt users (the target is past).
+  const round2Exempt = await isRound2Exempt(tournament, user.id);
+  const knockoutStarted = tournament
+    ? new Date() >= new Date(tournament.knockout_start_at)
+    : false;
+  const locks = computeLockState(tournament, undefined, { round2Exempt });
   const teams = (teamsRes.data ?? []) as BracketTeam[];
   const initial = Object.fromEntries(
     (picksRes.data ?? []).map((r) => [r.bracket_slot as string, r.team_id as string]),
@@ -92,8 +101,18 @@ export default async function BracketPage() {
         </p>
       </header>
 
-      {tournament && !locks.round2Locked && (
+      {tournament && !knockoutStarted && (
         <CountdownBanner target={tournament.knockout_start_at} label="Bracket locks in" />
+      )}
+
+      {round2Exempt && knockoutStarted && (
+        <p
+          className="badge badge-gold self-start"
+          style={{ boxShadow: "3px 3px 0 var(--ink)" }}
+        >
+          ⏳ Your league has extended bracket access — matches already played still
+          score against the real result.
+        </p>
       )}
 
       <BracketBuilder

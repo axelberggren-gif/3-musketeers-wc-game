@@ -9,7 +9,23 @@ export interface LockState {
   knockoutStartAt: Date;
 }
 
-export function computeLockState(tournament: Tournament | null, now = new Date()): LockState {
+export interface ComputeLockOptions {
+  /**
+   * When true, the viewer is exempt from the round-2 (knockout bracket) lock —
+   * their league was granted post-knockout bracket access via
+   * `tournament.locked_overrides.round2_open_leagues` (migration 0032). Mirrors
+   * the SQL `round2_locked_for()` exemption so the UI + server actions agree with
+   * the DB trigger. Resolved by `isRound2Exempt()` in
+   * `lib/predictions/round2-access.ts`. Does not affect round 1.
+   */
+  round2Exempt?: boolean;
+}
+
+export function computeLockState(
+  tournament: Tournament | null,
+  now = new Date(),
+  opts: ComputeLockOptions = {},
+): LockState {
   if (!tournament) {
     return {
       round1Locked: false,
@@ -22,7 +38,7 @@ export function computeLockState(tournament: Tournament | null, now = new Date()
   const knockoutStartAt = new Date(tournament.knockout_start_at);
   return {
     round1Locked: now >= firstKickoffAt,
-    round2Locked: now >= knockoutStartAt,
+    round2Locked: now >= knockoutStartAt && !opts.round2Exempt,
     firstKickoffAt,
     knockoutStartAt,
   };
