@@ -5,6 +5,10 @@ import { authorizedCron } from "@/lib/cron/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// syncScorers() drains up to 8 per-match detail fetches under a 10-req/min
+// limit, so it can run long; give it room before Vercel kills the function.
+// Pairs with the 30 s pg_net timeout in migration 0034_cron_http_timeout.sql.
+export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   if (!authorizedCron(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
