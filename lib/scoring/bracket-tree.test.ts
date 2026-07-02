@@ -11,9 +11,12 @@ import {
   computeGroupFinals,
   qualSourceLabel,
   slotFriendlyName,
+  slotMatchKey,
+  knockedOutTeamIds,
   R32_QUALIFIERS,
   type GroupMatch,
   type RealGroupMatch,
+  type KnockoutResultMatch,
 } from "./bracket-tree";
 
 describe("upstreamSlots", () => {
@@ -375,5 +378,61 @@ describe("r32SlotForMatchup", () => {
       const [a, b] = key.split("/");
       expect([a, b]).toEqual([a, b].sort());
     }
+  });
+});
+
+describe("slotMatchKey", () => {
+  it("maps the champion slot to the Final's match", () => {
+    expect(slotMatchKey("W")).toBe("F");
+  });
+
+  it("every other slot is backed by its own match", () => {
+    for (const slot of ["R32-1", "R32-16", "R16-8", "QF-A", "SF-B", "F"]) {
+      expect(slotMatchKey(slot)).toBe(slot);
+    }
+  });
+});
+
+describe("knockedOutTeamIds", () => {
+  const ko = (over: Partial<KnockoutResultMatch>): KnockoutResultMatch => ({
+    stage: "R32",
+    status: "FINISHED",
+    winner: "HOME",
+    home_team_id: "home",
+    away_team_id: "away",
+    ...over,
+  });
+
+  it("collects losers of finished knockout matches", () => {
+    const out = knockedOutTeamIds([
+      ko({ home_team_id: "a", away_team_id: "b", winner: "HOME" }),
+      ko({ stage: "R16", home_team_id: "c", away_team_id: "d", winner: "AWAY" }),
+    ]);
+    expect(out).toEqual(new Set(["b", "c"]));
+  });
+
+  it("ignores group-stage and 3rd-place matches", () => {
+    const out = knockedOutTeamIds([
+      ko({ stage: "GROUP", winner: "AWAY" }),
+      ko({ stage: "3RD", winner: "HOME" }),
+    ]);
+    expect(out.size).toBe(0);
+  });
+
+  it("ignores unfinished matches and null winners/losers", () => {
+    const out = knockedOutTeamIds([
+      ko({ status: "LIVE" }),
+      ko({ status: "SCHEDULED", winner: null }),
+      ko({ winner: null }), // finished but winner not yet filled (football-data lag)
+      ko({ winner: "HOME", away_team_id: null }), // loser side unknown
+    ]);
+    expect(out.size).toBe(0);
+  });
+
+  it("losing the Final knocks the runner-up out (of the champion race)", () => {
+    const out = knockedOutTeamIds([
+      ko({ stage: "F", home_team_id: "champ", away_team_id: "runnerUp", winner: "HOME" }),
+    ]);
+    expect(out).toEqual(new Set(["runnerUp"]));
   });
 });

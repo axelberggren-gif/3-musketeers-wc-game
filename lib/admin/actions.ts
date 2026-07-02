@@ -5,7 +5,8 @@ import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { seedTeams, syncFixtures, syncScorers } from "@/lib/football-data/sync";
 import { FootballDataClient } from "@/lib/football-data/client";
 import { captureServerActionError } from "@/lib/sentry/capture";
-import type { TablesInsert } from "@/lib/supabase/types";
+import { round2OpenLeagueIds } from "@/lib/predictions/round2-access";
+import type { Json, TablesInsert } from "@/lib/supabase/types";
 
 async function assertAdmin() {
   const supabase = await supabaseServer();
@@ -259,6 +260,46 @@ export async function setManualPropResolutions(formData: FormData) {
   );
   revalidatePath("/admin/props");
   revalidatePath("/predict/outcomes");
+  return { ok: true } as const;
+}
+
+// Per-league bracket "future betting" (migrations 0032 + 0036): toggles the
+// league's id in tournament.locked_overrides.round2_open_leagues. Members of a
+// listed league can keep betting on UNPLAYED knockout matches past the global
+// knockout lock — played matches stay locked and picks are restricted to teams
+// that actually advanced (enforced per-slot by the 0036 trigger + the
+// setBracketPick* actions). Service-role is required to write the tournament
+// row; assertAdmin() gates it.
+export async function setLeagueBracketFutureAccess(leagueId: string, open: boolean) {
+  await assertAdmin();
+  const service = supabaseService();
+  const { data: t, error: readError } = await service
+    .from("tournament")
+    .select("locked_overrides")
+    .eq("id", 1)
+    .single();
+  if (readError) return { ok: false, error: readError.message } as const;
+
+  const current = round2OpenLeagueIds(t);
+  const next = open
+    ? [...new Set([...current, leagueId])]
+    : current.filter((id) => id !== leagueId);
+  // Preserve any sibling override keys; only round2_open_leagues changes.
+  const overrides = (
+    t.locked_overrides &&
+    typeof t.locked_overrides === "object" &&
+    !Array.isArray(t.locked_overrides)
+      ? t.locked_overrides
+      : {}
+  ) as { [key: string]: Json | undefined };
+
+  const { error } = await service
+    .from("tournament")
+    .update({ locked_overrides: { ...overrides, round2_open_leagues: next } })
+    .eq("id", 1);
+  if (error) return { ok: false, error: error.message } as const;
+  revalidatePath("/admin/leagues");
+  revalidatePath("/predict/bracket");
   return { ok: true } as const;
 }
 

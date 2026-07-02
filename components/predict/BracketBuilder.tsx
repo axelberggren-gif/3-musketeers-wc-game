@@ -59,6 +59,19 @@ interface Props {
   /** Round-2 lock. When true the bracket flips to the read-only, live-scored mode. */
   locked: boolean;
   /**
+   * Future-betting window (migrations 0032/0036): the viewer's league was
+   * reopened past the global knockout lock. Unplayed matches stay bettable
+   * while every slot in `playedSlots` is settled read-only against the real
+   * result. Ignored when `locked` is true.
+   */
+  futures?: boolean;
+  /**
+   * Slots whose real match has kicked off (or is LIVE/FINISHED) — the per-slot
+   * lock inside the future-betting window. `W` locks with the Final. Computed
+   * server-side by the page; the server actions + DB trigger are the real gate.
+   */
+  playedSlots?: Record<string, boolean>;
+  /**
    * Real knockout match pairings keyed by `bracket_slot` (e.g. `R32-1`, `F`).
    * Feeds the R32 entry cells: each side is filled with its real team as soon as
    * football-data resolves it on the fixture (sides may resolve one at a time, so
@@ -166,10 +179,14 @@ type Contestant =
   | { kind: "feeder"; from: string }
   | { kind: "qualifier"; label: string };
 
+type BracketMode = "build" | "futures" | "live";
+
 interface ResolveCtx {
   picks: Record<string, string | null>;
   slotMatches: Record<string, BracketMatchPair>;
+  results: Record<string, SlotResult>;
   teamById: Record<string, BracketTeam>;
+  mode: BracketMode;
 }
 
 // The two (or one, for W) contestants of a slot. R32 cells resolve each side
@@ -194,6 +211,27 @@ function contestantsFor(slot: string, ctx: ResolveCtx): Contestant[] {
   if (slot === "W") {
     const f = ctx.picks["F"];
     return [f ? { kind: "team", teamId: f } : { kind: "feeder", from: "F" }];
+  }
+  // Future-betting window: reality outranks the user's picks — a downstream
+  // side is the slot's real imported pairing when known, else the real winner
+  // of a FINISHED feeder, and only then the user's own (still-live) feeder
+  // pick. Guarantees every offered team has actually advanced.
+  if (ctx.mode === "futures") {
+    const m = ctx.slotMatches[slot];
+    if (m?.homeTeamId && m?.awayTeamId) {
+      return [
+        { kind: "team", teamId: m.homeTeamId },
+        { kind: "team", teamId: m.awayTeamId },
+      ];
+    }
+    return upstreamSlots(slot).map((up): Contestant => {
+      const r = ctx.results[up];
+      if (r?.status === "FINISHED" && r.winnerTeamId) {
+        return { kind: "team", teamId: r.winnerTeamId };
+      }
+      if (ctx.picks[up]) return { kind: "team", teamId: ctx.picks[up]! };
+      return { kind: "feeder", from: up };
+    });
   }
   return upstreamSlots(slot).map((up): Contestant =>
     ctx.picks[up] ? { kind: "team", teamId: ctx.picks[up]! } : { kind: "feeder", from: up },
@@ -250,6 +288,8 @@ export function BracketBuilder({
   teams,
   initial,
   locked,
+  futures = false,
+  playedSlots = {},
   slotMatches,
   results,
 }: Props) {
@@ -257,7 +297,7 @@ export function BracketBuilder({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  const mode: "build" | "live" = locked ? "live" : "build";
+  const mode: BracketMode = locked ? "live" : futures ? "futures" : "build";
 
   const teamById = useMemo(
     () => Object.fromEntries(teams.map((t) => [t.id, t])) as Record<string, BracketTeam>,
@@ -270,19 +310,35 @@ export function BracketBuilder({
   }, [slots]);
 
   const ctx: ResolveCtx = useMemo(
-    () => ({ picks, slotMatches, teamById }),
-    [picks, slotMatches, teamById],
+    () => ({ picks, slotMatches, results, teamById, mode }),
+    [picks, slotMatches, results, teamById, mode],
   );
 
   const applyPick = useCallback(
     (slot: string, teamId: string) => {
-      if (locked) return;
+      if (locked || playedSlots[slot]) return;
       const previous = { ...picks };
-      const invalidatedDownstream = collectDownstream(slot).filter((ds) => {
-        const ups = upstreamSlots(ds);
-        const newWinners = new Set(ups.map((u) => (u === slot ? teamId : picks[u])).filter(Boolean));
-        return picks[ds] && !newWinners.has(picks[ds]!);
-      });
+      // What advances out of a feeder after this edit: the new pick for the
+      // edited slot; in futures mode a FINISHED feeder's REAL winner (a
+      // downstream pick can back it with no user pick on the feeder — don't
+      // clear those); otherwise the user's pick.
+      const effectiveWinner = (u: string): string | null | undefined => {
+        if (u === slot) return teamId;
+        if (futures) {
+          const r = results[u];
+          if (r?.status === "FINISHED" && r.winnerTeamId) return r.winnerTeamId;
+        }
+        return picks[u];
+      };
+      const invalidatedDownstream = collectDownstream(slot)
+        // A played slot's bet is settled — never cascade a delete into it (its
+        // match kicked off before anything upstream of an editable slot, so
+        // this can't trigger; belt-and-braces with the DB per-slot lock).
+        .filter((ds) => !playedSlots[ds])
+        .filter((ds) => {
+          const newWinners = new Set(upstreamSlots(ds).map(effectiveWinner).filter(Boolean));
+          return picks[ds] && !newWinners.has(picks[ds]!);
+        });
 
       const next = { ...picks, [slot]: teamId };
       for (const ds of invalidatedDownstream) next[ds] = null;
@@ -302,7 +358,7 @@ export function BracketBuilder({
         }
       });
     },
-    [locked, picks],
+    [locked, playedSlots, picks, futures, results],
   );
 
   // ── Connector measurement ──────────────────────────────────────────────
@@ -356,7 +412,8 @@ export function BracketBuilder({
     // re-measure when picks change (cells grow/shrink as teams resolve) or on mode flip.
   }, [measure, picks, mode]);
 
-  const score = mode === "live" ? bracketScore(picks, results, slotsByStage) : null;
+  // Futures mode scores too — the played half of the bracket is already settling.
+  const score = mode !== "build" ? bracketScore(picks, results, slotsByStage) : null;
 
   const renderColumn = (columnSlots: readonly string[]) => (
     <div className="flex flex-col justify-around h-full min-w-0" style={{ flex: "1 1 0" }}>
@@ -366,6 +423,7 @@ export function BracketBuilder({
             slot={slot}
             ctx={ctx}
             mode={mode}
+            played={!!playedSlots[slot]}
             locked={locked}
             pending={pending}
             result={results[slot]}
@@ -384,10 +442,14 @@ export function BracketBuilder({
         </p>
       )}
 
-      {/* top bar: build legend / live scoreboard */}
+      {/* top bar: build legend / live scoreboard (futures shows both — you're
+          still betting AND points are already settling) */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <StatusPill mode={mode} results={results} slotsByStage={slotsByStage} />
-        {mode === "build" ? <StageLegend /> : score && <PointsHUD score={score} />}
+        <div className="flex flex-wrap items-center gap-3">
+          {mode !== "live" && <StageLegend />}
+          {score && <PointsHUD score={score} />}
+        </div>
       </div>
 
       {/* the wall chart — fills the container on desktop (lg+, no horizontal
@@ -411,7 +473,7 @@ export function BracketBuilder({
               let stroke = decided ? "var(--pitch)" : "var(--ink-soft)";
               let dash: string | undefined = decided ? undefined : "4 5";
               let op = decided ? 1 : 0.5;
-              if (mode === "live") {
+              if (mode !== "build") {
                 const r = results[c.up];
                 if (r && r.status === "FINISHED") {
                   const ok = !!picks[c.up] && picks[c.up] === r.winnerTeamId;
@@ -457,6 +519,7 @@ export function BracketBuilder({
                     slot="F"
                     ctx={ctx}
                     mode={mode}
+                    played={!!playedSlots["F"]}
                     locked={locked}
                     pending={pending}
                     result={results["F"]}
@@ -471,7 +534,7 @@ export function BracketBuilder({
                 teamById={teamById}
                 mode={mode}
                 result={results["W"]}
-                locked={locked}
+                editable={mode !== "live" && !playedSlots["W"]}
                 pending={pending}
                 onCrown={() => picks["F"] && applyPick("W", picks["F"]!)}
               />
@@ -488,7 +551,9 @@ export function BracketBuilder({
       <p className="font-mono-sticker text-[11px] text-ink-soft">
         {mode === "build"
           ? "Round-of-32 ties fill in from the group stage (Winner / Runner-up / 3rd of each group) as those groups finish — then tap the winner and they flow into the next round. Slots you haven’t reached read “Winner of …”. Autosaves; locks at the deadline."
-          : "Bracket locked. Each match banks its points or strikes your pick as results land — your downstream picks persist, they just stop scoring."}
+          : mode === "futures"
+            ? "Future betting: tap the winner of any match that hasn’t kicked off — only teams still in the tournament are offered. Played matches are settled against the real result and stay locked; each remaining match locks at its own kickoff."
+            : "Bracket locked. Each match banks its points or strikes your pick as results land — your downstream picks persist, they just stop scoring."}
       </p>
     </div>
   );
@@ -501,6 +566,7 @@ function MatchCell({
   slot,
   ctx,
   mode,
+  played = false,
   locked,
   pending,
   result,
@@ -509,7 +575,9 @@ function MatchCell({
 }: {
   slot: string;
   ctx: ResolveCtx;
-  mode: "build" | "live";
+  mode: BracketMode;
+  /** Futures mode: this slot's real match has kicked off — settled, not bettable. */
+  played?: boolean;
   locked: boolean;
   pending: boolean;
   result: SlotResult | undefined;
@@ -523,11 +591,19 @@ function MatchCell({
   const bothKnown = cont.length >= 2 && cont.every((c) => c.kind === "team");
   const stalePick = !!winner && knownTeamIds.length > 0 && !knownTeamIds.includes(winner);
 
-  const scored = mode === "live" && !!result && result.status === "FINISHED";
+  // Live mode scores everything; futures mode scores only the played slots
+  // (the rest are still open bets).
+  const scored =
+    (mode === "live" || (mode === "futures" && played)) &&
+    !!result &&
+    result.status === "FINISHED";
   const realWinner = scored ? result!.winnerTeamId : null;
   const correct = scored && !!winner && winner === realWinner;
   const pts = bracketPointsForSlot(slot);
-  const clickable = mode === "build" && !locked && bothKnown && !pending;
+  const clickable = mode !== "live" && !locked && !played && bothKnown && !pending;
+  // Futures: a played-but-unsettled slot (LIVE, or FINISHED with the winner not
+  // yet filled in) is locked without a scored footer — flag why it won't tap.
+  const inPlay = mode === "futures" && played && !scored;
 
   const edge = scored ? (correct ? "var(--pitch)" : "var(--red)") : winner ? "var(--pitch)" : "var(--ink)";
   const solid = scored || winner || bothKnown;
@@ -571,9 +647,14 @@ function MatchCell({
           {lineFor(c, i)}
         </div>
       ))}
-      {stalePick && !scored && (
+      {stalePick && !scored && !inPlay && (
         <div className="px-2 py-1 bg-coral text-white font-display uppercase text-[8px] tracking-wider text-center">
           Re-pick
+        </div>
+      )}
+      {inPlay && (
+        <div className="px-2 py-1 bg-paper-2 text-ink-soft font-mono-sticker text-[8px] font-bold tracking-wider text-center border-t-2 border-ink">
+          🔒 KICKED OFF
         </div>
       )}
       {scored && (
@@ -696,21 +777,22 @@ function ChampionSticker({
   teamById,
   mode,
   result,
-  locked,
+  editable,
   pending,
   onCrown,
 }: {
   wPick: string | null;
   fPick: string | null;
   teamById: Record<string, BracketTeam>;
-  mode: "build" | "live";
+  mode: BracketMode;
   result: SlotResult | undefined;
-  locked: boolean;
+  /** Crown still changeable — build phase, or futures with the Final unplayed. */
+  editable: boolean;
   pending: boolean;
   onCrown: () => void;
 }) {
   const champTeam = wPick ? teamById[wPick] : undefined;
-  const scored = mode === "live" && !!result && result.status === "FINISHED";
+  const scored = mode !== "build" && !!result && result.status === "FINISHED";
   const realChamp = scored ? result!.winnerTeamId : null;
   const champCorrect = scored && !!wPick && wPick === realChamp;
   const champMissed = scored && !!wPick && wPick !== realChamp;
@@ -767,14 +849,14 @@ function ChampionSticker({
     );
   }
 
-  // Final winner decided but not yet crowned → offer the crown (build only).
-  if (mode === "build" && fPick) {
+  // Final winner picked but not yet crowned → offer the crown while editable.
+  if (editable && fPick) {
     const f = teamById[fPick];
     return (
       <button
         type="button"
         onClick={onCrown}
-        disabled={locked || pending}
+        disabled={pending}
         className="w-full max-w-[200px] border-2 border-dashed border-ink rounded-[14px] px-3 py-3 text-center bg-white cursor-pointer transition-transform hover:-translate-x-px hover:-translate-y-px disabled:opacity-60"
         style={{ boxShadow: "4px 4px 0 var(--gold)" }}
       >
@@ -810,7 +892,7 @@ function StatusPill({
   results,
   slotsByStage,
 }: {
-  mode: "build" | "live";
+  mode: BracketMode;
   results: Record<string, SlotResult>;
   slotsByStage: Record<BracketStage, string[]>;
 }) {
@@ -819,6 +901,8 @@ function StatusPill({
   if (mode === "build") {
     text = "Round 2 · Knockouts";
     cls = "badge badge-coral";
+  } else if (mode === "futures") {
+    text = "🔮 Future betting open";
   } else {
     const finalDone = results["F"]?.status === "FINISHED";
     if (finalDone) {

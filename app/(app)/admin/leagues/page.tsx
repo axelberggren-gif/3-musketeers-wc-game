@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
+import { round2OpenLeagueIds } from "@/lib/predictions/round2-access";
 import { isoToLocal } from "@/lib/utils";
+import { BracketFutureBettingToggle } from "./BracketFutureBettingToggle";
 
 export default async function AdminLeaguesPage() {
   // The admin layout already gates /admin/*, but we re-verify here because the
@@ -23,18 +25,22 @@ export default async function AdminLeaguesPage() {
   if (!me?.is_admin) redirect("/leagues");
 
   const service = supabaseService();
-  const [leaguesRes, membersRes, profilesRes] = await Promise.all([
+  const [leaguesRes, membersRes, profilesRes, tournamentRes] = await Promise.all([
     service
       .from("leagues")
       .select("id, slug, name, description, owner_id, created_at")
       .order("created_at", { ascending: true }),
     service.from("league_members").select("league_id, user_id, role, joined_at"),
     service.from("profiles").select("id, username, display_name"),
+    service.from("tournament").select("locked_overrides").eq("id", 1).single(),
   ]);
 
   const leagues = leaguesRes.data ?? [];
   const members = membersRes.data ?? [];
   const profiles = profilesRes.data ?? [];
+  // Leagues with bracket "future betting" open (migrations 0032 + 0036) —
+  // toggled per league below.
+  const futureBettingOpen = new Set(round2OpenLeagueIds(tournamentRes.data));
 
   const profileById = new Map(profiles.map((p) => [p.id, p]));
   const nameFor = (userId: string) => {
@@ -66,7 +72,10 @@ export default async function AdminLeaguesPage() {
         <h1 className="text-2xl font-bold">Leagues</h1>
         <p className="text-sm text-[var(--muted)]">
           Every league and who&rsquo;s in it. This view spans all leagues — it bypasses the
-          per-league visibility that applies everywhere else.
+          per-league visibility that applies everywhere else. The 🔮 toggle opens bracket{" "}
+          <strong>future betting</strong> for a league: its members can bet on knockout matches
+          that haven&rsquo;t kicked off, while played matches stay locked and only teams that
+          advanced are pickable.
         </p>
       </div>
 
@@ -102,6 +111,10 @@ export default async function AdminLeaguesPage() {
                     <Link href={`/leagues/${l.slug}`} className="text-[var(--accent)]">
                       View league →
                     </Link>
+                    <BracketFutureBettingToggle
+                      leagueId={l.id}
+                      open={futureBettingOpen.has(l.id)}
+                    />
                   </div>
                 </div>
 

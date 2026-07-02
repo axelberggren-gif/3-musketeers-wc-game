@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { supabaseServer } from "@/lib/supabase/server";
 import { computeLockState } from "@/lib/scoring/lock";
+import { knockedOutTeamIds, slotMatchKey } from "@/lib/scoring/bracket-tree";
 import { isRound2Exempt } from "@/lib/predictions/round2-access";
 import {
   PICK_REACTION_EMOJI,
@@ -29,12 +30,66 @@ async function getLocks() {
 // Round-2 lock for a specific user: honours the per-league bracket exemption
 // (migration 0032) so a member of an opened-up league can still write bracket
 // picks past the global knockout lock — matching the DB `round2_locked_for()`
-// trigger. Used by the bracket write actions instead of the global getLocks().
+// trigger. `futuresOnly` is true when the only reason the user is unlocked is
+// that exemption (global knockout lock has passed): in that window writes are
+// restricted per-slot to unplayed matches + advanced teams (migration 0036).
+// Used by the bracket write actions instead of the global getLocks().
 async function getBracketLocks(userId: string) {
   const supabase = await supabaseServer();
   const { data } = await supabase.from("tournament").select("*").single();
   const round2Exempt = await isRound2Exempt(data, userId);
-  return computeLockState(data, undefined, { round2Exempt });
+  const locks = computeLockState(data, undefined, { round2Exempt });
+  const knockoutStarted = data ? new Date() >= new Date(data.knockout_start_at) : false;
+  return { ...locks, futuresOnly: knockoutStarted && !locks.round2Locked };
+}
+
+// Per-slot future-betting guard, mirroring the DB trigger checks from migration
+// 0036 (`bracket_slot_started` / `bracket_pick_team_allowed`): a write in the
+// futures window must target a slot whose real match hasn't kicked off, and the
+// picked team must be one of the slot's real contestants (when both are known)
+// and not already knocked out. Returns an error message, or null when allowed.
+async function futureBetViolation(
+  entries: { slot: string; teamId?: string }[],
+): Promise<string | null> {
+  const supabase = await supabaseServer();
+  const matchSlots = [...new Set(entries.map((e) => slotMatchKey(e.slot)))];
+  const [slotMatchesRes, finishedRes] = await Promise.all([
+    supabase
+      .from("matches")
+      .select("bracket_slot, kickoff_at, status, home_team_id, away_team_id")
+      .in("bracket_slot", matchSlots),
+    supabase
+      .from("matches")
+      .select("stage, status, winner, home_team_id, away_team_id")
+      .in("stage", ["R32", "R16", "QF", "SF", "F"])
+      .eq("status", "FINISHED"),
+  ]);
+  if (slotMatchesRes.error) return slotMatchesRes.error.message;
+  if (finishedRes.error) return finishedRes.error.message;
+
+  const bySlot = new Map((slotMatchesRes.data ?? []).map((m) => [m.bracket_slot, m]));
+  const eliminated = knockedOutTeamIds(finishedRes.data ?? []);
+  const now = new Date();
+  for (const e of entries) {
+    const m = bySlot.get(slotMatchKey(e.slot));
+    if (m && (new Date(m.kickoff_at) <= now || m.status === "LIVE" || m.status === "FINISHED")) {
+      return "This match has already started — future bets only.";
+    }
+    if (e.teamId) {
+      if (
+        m?.home_team_id &&
+        m?.away_team_id &&
+        e.teamId !== m.home_team_id &&
+        e.teamId !== m.away_team_id
+      ) {
+        return "That team has not advanced to this match.";
+      }
+      if (eliminated.has(e.teamId)) {
+        return "That team has already been knocked out.";
+      }
+    }
+  }
+  return null;
 }
 
 export async function setMatchPick(matchId: string, pick: Pick1X2 | null) {
@@ -212,6 +267,10 @@ export async function setBracketPick(slot: string, teamId: string) {
   const { supabase, user } = await authedClient();
   const locks = await getBracketLocks(user.id);
   if (locks.round2Locked) return { ok: false, error: "Round 2 bracket is locked." } as const;
+  if (locks.futuresOnly) {
+    const violation = await futureBetViolation([{ slot, teamId }]);
+    if (violation) return { ok: false, error: violation } as const;
+  }
   const { error } = await supabase
     .from("bracket_predictions")
     .upsert({ user_id: user.id, bracket_slot: slot, team_id: teamId }, {
@@ -227,6 +286,10 @@ export async function clearBracketPicks(slots: string[]) {
   const { supabase, user } = await authedClient();
   const locks = await getBracketLocks(user.id);
   if (locks.round2Locked) return { ok: false, error: "Round 2 bracket is locked." } as const;
+  if (locks.futuresOnly) {
+    const violation = await futureBetViolation(slots.map((slot) => ({ slot })));
+    if (violation) return { ok: false, error: violation } as const;
+  }
   const { error } = await supabase
     .from("bracket_predictions")
     .delete()
@@ -242,6 +305,10 @@ export async function setBracketPicksBulk(picks: { slot: string; teamId: string 
   const { supabase, user } = await authedClient();
   const locks = await getBracketLocks(user.id);
   if (locks.round2Locked) return { ok: false, error: "Round 2 bracket is locked." } as const;
+  if (locks.futuresOnly) {
+    const violation = await futureBetViolation(picks);
+    if (violation) return { ok: false, error: violation } as const;
+  }
   const rows = picks.map((p) => ({
     user_id: user.id,
     bracket_slot: p.slot,
