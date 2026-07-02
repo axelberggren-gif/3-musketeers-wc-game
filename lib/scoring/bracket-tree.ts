@@ -157,6 +157,38 @@ export function slotFriendlyName(slot: string): string {
   }
 }
 
+// ── Future betting (per-league bracket reopen, migration 0036) ──────────────
+
+// The `matches.bracket_slot` value backing a pick slot. Every slot maps to its
+// own match except the champion (`W`), which is settled by the Final ('F').
+export function slotMatchKey(slot: string): string {
+  return slot === "W" ? "F" : slot;
+}
+
+export type KnockoutResultMatch = {
+  stage: string;
+  status: string;
+  winner: string | null;
+  home_team_id: string | null;
+  away_team_id: string | null;
+};
+
+// Teams already knocked out of the tournament: losers of FINISHED knockout
+// matches. GROUP isn't a knockout and the 3RD-place playoff isn't elimination,
+// so both are excluded. Pure mirror of the SQL `bracket_pick_team_allowed()`
+// eliminated check (migration 0036) — a future bet may never back one of these.
+const KNOCKOUT_STAGES_ELIMINATING = new Set(["R32", "R16", "QF", "SF", "F"]);
+
+export function knockedOutTeamIds(matches: KnockoutResultMatch[]): Set<string> {
+  const out = new Set<string>();
+  for (const m of matches) {
+    if (!KNOCKOUT_STAGES_ELIMINATING.has(m.stage) || m.status !== "FINISHED") continue;
+    const loser = m.winner === "HOME" ? m.away_team_id : m.winner === "AWAY" ? m.home_team_id : null;
+    if (loser) out.add(loser);
+  }
+  return out;
+}
+
 // ── Real group standings → winner / runner-up (from football-data results) ──
 export type RealGroupMatch = {
   group_letter: string | null;

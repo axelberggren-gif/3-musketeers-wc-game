@@ -6,8 +6,12 @@ import type { Tournament } from "@/lib/supabase/types";
  * `tournament.locked_overrides.round2_open_leagues` (a jsonb array of uuid
  * strings; see migration 0032). Tolerant of the column being `{}`, missing the
  * key, or holding a non-array — returns `[]` in all of those cases.
+ * Accepts any row that carries `locked_overrides` (the admin toggle reads only
+ * that column).
  */
-export function round2OpenLeagueIds(tournament: Tournament | null): string[] {
+export function round2OpenLeagueIds(
+  tournament: Pick<Tournament, "locked_overrides"> | null,
+): string[] {
   const overrides = tournament?.locked_overrides;
   if (overrides == null || typeof overrides !== "object" || Array.isArray(overrides)) {
     return [];

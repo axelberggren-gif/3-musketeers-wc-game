@@ -30,7 +30,9 @@ export default async function BracketPage() {
       supabase.from("bracket_predictions").select("bracket_slot, team_id").eq("user_id", user.id),
       supabase
         .from("matches")
-        .select("bracket_slot, home_team_id, away_team_id, status, winner, home_score, away_score")
+        .select(
+          "bracket_slot, kickoff_at, home_team_id, away_team_id, status, winner, home_score, away_score",
+        )
         .in("stage", KNOCKOUT_STAGES),
     ]);
 
@@ -58,6 +60,11 @@ export default async function BracketPage() {
   // (Placeholder R16+ rows with no teams simply contribute nothing.)
   const slotMatches: Record<string, BracketMatchPair> = {};
   const results: Record<string, SlotResult> = {};
+  // Slots whose real match has kicked off (or is LIVE/FINISHED) — in the
+  // future-betting window (migration 0036) these stay locked while the rest of
+  // the bracket is bettable. Mirrors the SQL `bracket_slot_started()`.
+  const playedSlots: Record<string, boolean> = {};
+  const now = new Date();
   for (const m of knockoutMatchesRes.data ?? []) {
     if (!m.bracket_slot) continue;
     if (m.home_team_id || m.away_team_id) {
@@ -74,9 +81,18 @@ export default async function BracketPage() {
       awayScore: m.away_score,
       status: m.status,
     };
+    if (new Date(m.kickoff_at) <= now || m.status === "LIVE" || m.status === "FINISHED") {
+      playedSlots[m.bracket_slot] = true;
+    }
   }
-  // The champion (`W`) is scored off the Final match.
+  // The champion (`W`) is scored off — and locks with — the Final match.
   if (results["F"]) results["W"] = results["F"];
+  if (playedSlots["F"]) playedSlots["W"] = true;
+
+  // Future-betting window: the viewer's league has been reopened (0032/0036)
+  // past the global knockout lock — unplayed matches are bettable, played ones
+  // stay locked.
+  const futures = round2Exempt && knockoutStarted;
 
   const slots = buildSlotDefs();
 
@@ -105,13 +121,13 @@ export default async function BracketPage() {
         <CountdownBanner target={tournament.knockout_start_at} label="Bracket locks in" />
       )}
 
-      {round2Exempt && knockoutStarted && (
+      {futures && (
         <p
           className="badge badge-gold self-start"
           style={{ boxShadow: "3px 3px 0 var(--ink)" }}
         >
-          ⏳ Your league has extended bracket access — matches already played still
-          score against the real result.
+          🔮 Future betting is open for your league — bet on any match that
+          hasn&rsquo;t kicked off. Played matches are settled and stay locked.
         </p>
       )}
 
@@ -120,6 +136,8 @@ export default async function BracketPage() {
         teams={teams}
         initial={initial}
         locked={locks.round2Locked}
+        futures={futures}
+        playedSlots={playedSlots}
         slotMatches={slotMatches}
         results={results}
       />

@@ -16,7 +16,8 @@ server pages.
   measured SVG elbow connectors. Cells are tagged `data-slot`; a `measure()` callback
   (run in an effect on rAF / `ResizeObserver` / `document.fonts.ready`, never during
   render) reads their boxes via `localBox()` (an offset-chain immune to scroll) and
-  builds the connector paths. Two lifecycle modes, derived from the `locked` prop:
+  builds the connector paths. Three lifecycle modes, derived from the `locked` +
+  `futures` props:
   - **build** (`!locked`) — editable. Each slot is a `MatchCell` with two stacked
     team-lines: click a line to advance that team. A slot is pickable only when **both**
     contestants are known (top-down fill); an undecided downstream feeder renders
@@ -34,6 +35,17 @@ server pages.
     NED/MAR-in-two-slots bug). You tap the winner once both sides are real teams, same
     as every downstream cell. Team-lines display the 3-letter `code` + flag. The Champion (`W`)
     is a crown-sticker: tap to crown the Final winner, which sets the real `W` pick (+15).
+  - **futures** (`!locked && futures`, migrations 0032/0036) — the per-league
+    "future betting" window past the global knockout lock. Per-slot: slots in the
+    `playedSlots` prop (real match kicked off / LIVE / FINISHED; `W` locks with the
+    Final) are read-only — FINISHED ones render the live-mode scored footer, in-play
+    ones a "🔒 KICKED OFF" strip — while unplayed slots stay tappable and lock at
+    their own kickoff. Downstream contestants resolve **reality-first**: the slot's
+    real imported pairing when both sides are known, else per feeder the FINISHED
+    feeder's real winner, else the user's own still-live feeder pick — so only teams
+    still in the tournament are ever offered. Status pill reads "🔮 Future betting
+    open"; the `PointsHUD` renders alongside the stage legend. The server actions +
+    the 0036 DB trigger re-enforce the same per-slot rules.
   - **live** (`locked`) — read-only + scored from the `results` prop
     (`{winnerTeamId, homeScore, awayScore, status}` per slot; `W` ← the Final result).
     A FINISHED slot banks its points (green ✓ Won + scoreline footer + `+pts`) or strikes
@@ -135,6 +147,7 @@ server pages.
 
 ## Recent changes
 <!-- Newest first. Keep last 10. One line per entry. -->
+- 2026-07-02: `BracketBuilder` gained a third lifecycle mode, **futures** — per-league bracket "future betting" past the global knockout lock (migrations `0032`/`0036`). New props `futures?: boolean` + `playedSlots?: Record<string, boolean>` (computed server-side by `bracket/page.tsx` from each knockout match's `kickoff_at`/`status`; `W` locks with the Final). In futures mode: played slots are read-only (FINISHED → the live-mode scored footer; in-play → a "🔒 KICKED OFF" strip), unplayed slots stay tappable, `applyPick` refuses played slots and never cascade-clears into one, and `contestantsFor()` resolves downstream sides reality-first (real imported pairing → FINISHED feeder's real winner → the user's own still-live feeder pick) so only teams that actually advanced are offered. `ChampionSticker` takes `editable` (crowning allowed in build, or futures while the Final is unplayed); status pill reads "🔮 Future betting open"; the `PointsHUD` shows alongside the stage legend; connectors colour by results in futures too. The `setBracketPick*` actions + the 0036 DB trigger enforce the same per-slot rules server-side.
 - 2026-06-28: `BracketBuilder`'s `LEFT`/`RIGHT` poster column ordering realigned after the `BRACKET_UPSTREAM` fix (`lib/scoring/bracket-tree.ts`) corrected the knockout tree (it had paired adjacent kickoff-ordered R32 slots, producing impossible R16 ties like Norway vs France). The FIFA bracket pairs non-adjacent slots (`R16-1 = R32-2 + R32-5`, etc.), so the columns are no longer a plain `R32-1..8` / `R16-1..4` sequence — each column is ordered top→bottom so every downstream cell lands centred between its two real feeders (left half feeds SF-A = QF-A+QF-B, right half feeds SF-B = QF-C+QF-D). The DOM-measured connectors and per-slot scoring are unchanged; this is purely the matchup graph + visual funnel. No DB/scoring change.
 - 2026-06-27: `BracketBuilder` R32 entry cells now resolve **only** from the authoritative imported fixture, per side — fixing the same team showing in two R32 slots (the NED/MAR duplication). Previously a side could be resolved either from `slotMatches` (used only when **both** sides had a team) or, as a fallback, *guessed* from `R32_QUALIFIERS` + the `groupFinals`/`computeGroupFinals()` path. That guess is unsafe: `R32_QUALIFIERS`' slot numbering follows FIFA's "Matches 73–88" order while `deriveBracketSlot()` assigns `bracket_slot` by kickoff order, so they don't line up — a half-resolved real fixture (one side TBD → excluded from `slotMatches`) fell back to the mis-aligned guess and placed a team in the wrong slot, duplicating one the real fixture had already placed elsewhere (and `computeGroupFinals()` has no head-to-head tiebreak, so it can disagree with football-data outright). Now: `slotMatches` records a slot as soon as **either** side has a team (`BracketMatchPair` sides are nullable), `contestantsFor("R32-n")` reads each side independently (real team if set, else a neutral `To be decided` placeholder), and the `groupFinals` prop + `resolveQualTeam()` are removed from `BracketBuilder` / `bracket/page.tsx`. The `R32_QUALIFIERS` / `qualSourceLabel` imports are dropped from `BracketBuilder` too — the group-qualification placeholder labels ("Winner Group F", etc.) were wrong for the same slot-misalignment reason (e.g. football-data's R32-3 home is GER, who isn't even in Group F), so unresolved sides now read a neutral "To be decided". `computeGroupFinals()` / `R32_QUALIFIERS` stay in `bracket-tree.ts` (tests/back-compat) but are no longer used by the UI. No DB/scoring change.
 - 2026-06-09: `NumberInput`'s `max` prop is now **optional**, and the Total-goals card on `OutcomesBoard` drops its `max={300}` so that guess is unbounded above (only the `min={0}` floor remains). When `max` is omitted the component skips the upper-bound check, omits the input's `max` attribute, shows a `{min}+` placeholder (was `{min}–{max}`), and the validation message reads "Pick an integer of {min} or more." The other numeric props still pass `max` and are unchanged. Pairs with `setTotalGoalsGuess` dropping its `> 300` branch (`lib/predictions/actions.ts`) and migration `0025_relax_total_goals_cap.sql` relaxing the DB CHECK to `>= 0`. WC 2026's 104 matches can clear 300 in a high-scoring tournament, and closest-guess scoring means an unbounded value can't inflate points. No scoring/point-value change.
